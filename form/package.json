@@ -1,0 +1,26 @@
+{
+  "name": "ownerinspection-form",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev -p 8030",
+    "build": "next build",
+    "start": "next start -p 8030",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@stripe/react-stripe-js": "2.7.3",
+    "@stripe/stripe-js": "3.4.1",
+    "next": "15.5.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "stripe": "18.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.30",
+    "@types/react": "19.1.10",
+    "eslint": "8.57.0",
+    "eslint-config-next": "15.5.0",
+    "typescript": "5.4.5"
+  }
+}

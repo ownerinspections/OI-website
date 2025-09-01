@@ -1,0 +1,113 @@
+"use server";
+
+import { getRequest, postRequest, patchRequest } from "@/lib/http/fetcher";
+import { APP_BASE_URL, PROPOSAL_EXPIRY_DAYS, PROPOSAL_NAME, PROPOSAL_STATUS } from "@/lib/env";
+
+type DirectusItemResponse<T> = { data: T };
+
+export type QuoteCreateInput = {
+	deal: string | number;
+	contact: string | number;
+	property: string | number;
+	service: number;
+	service_code: string;
+	property_category: "residential" | "commercial";
+	amount: number;
+	inspection_amount?: number;
+	currency?: string;
+	note?: string | null;
+	stage_prices?: unknown | null;
+	status?: string;
+};
+
+export type QuoteRecord = QuoteCreateInput & { id: string | number };
+
+export async function createQuote(data: QuoteCreateInput): Promise<QuoteRecord> {
+	const payload: Record<string, unknown> = {
+		...data,
+		currency: data.currency || "AUD",
+		status: data.status || "generated",
+		inspection_amount: data.inspection_amount ?? data.amount,
+	};
+
+	const res = await postRequest<DirectusItemResponse<QuoteRecord>>(
+		"/items/os_quotes",
+		payload
+	);
+	return (res as any)?.data as QuoteRecord;
+}
+
+export type ProposalRecord = {
+	id: string | number;
+	name: string;
+	deal: string | number;
+	contact?: string | number;
+	status: string;
+	expiration_date: string;
+	note?: string | null;
+	quote_amount: number;
+	quote_id?: string;
+};
+
+function generateQuoteId(): string {
+	const random = Math.floor(100000 + Math.random() * 900000);
+	return String(random);
+}
+
+export async function createProposal(params: {
+	dealId: string | number;
+	contactId?: string | number;
+	propertyId?: string | number;
+	amount: number;
+	note?: string | null;
+}): Promise<ProposalRecord> {
+	const now = new Date();
+	const expiry = new Date(now.getTime() + Math.max(1, PROPOSAL_EXPIRY_DAYS || 7) * 24 * 60 * 60 * 1000);
+	let contactIdStr: string | undefined = params.contactId !== undefined ? String(params.contactId) : undefined;
+	if (!contactIdStr) {
+		try {
+			const dealRes = await getRequest<{ data: { contact?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(params.dealId))}?fields=contact`);
+			const dContact = (dealRes as any)?.data?.contact;
+			if (dContact) contactIdStr = String(dContact);
+		} catch {}
+	}
+	const payload = {
+		name: PROPOSAL_NAME,
+		deal: String(params.dealId),
+		...(contactIdStr ? { contact: contactIdStr } : {}),
+		status: PROPOSAL_STATUS,
+		expiration_date: expiry.toISOString(),
+		note: params.note || "Proposal subject to confirmation. Final terms will be outlined in the agreement.",
+		quote_amount: params.amount,
+		inspection_amount: params.amount,
+	};
+	const res = await postRequest<{ data: ProposalRecord }>("/items/os_proposals", payload);
+	const created = (res as any)?.data as ProposalRecord;
+
+	// After creation, patch the proposal with a full quote URL (quote_link)
+	try {
+		const base = (() => {
+			const envUrl = (APP_BASE_URL || "").trim();
+			if (envUrl) return envUrl.replace(/\/$/, "");
+			const vercelUrl = (process.env.VERCEL_URL || "").trim();
+			if (vercelUrl) return `https://${vercelUrl.replace(/\/$/, "")}`;
+			const host = (process.env.HOST || "localhost").trim();
+			const port = (process.env.PORT || "3000").trim();
+			const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
+			return `${protocol}://${host}${port ? `:${port}` : ""}`.replace(/\/$/, "");
+		})();
+		const urlParams = new URLSearchParams();
+		urlParams.set("quoteId", String(created.id));
+		if (params.dealId !== undefined) urlParams.set("dealId", String(params.dealId));
+		if (params.contactId !== undefined) urlParams.set("contactId", String(params.contactId));
+		if (params.propertyId !== undefined) urlParams.set("propertyId", String(params.propertyId));
+		const fullUrl = `${base}/steps/04-quote?${urlParams.toString()}`;
+		const baseId = Number(created.id);
+		const sequentialId = Number.isFinite(baseId) ? String(100000 + baseId) : String(Math.floor(100000 + Math.random() * 900000));
+		await patchRequest(`/items/os_proposals/${encodeURIComponent(String(created.id))}`, { quote_link: fullUrl, quote_id: sequentialId });
+	} catch (_e) {
+		// Ignore patch failures; proposal was created successfully
+	}
+
+	return created;
+}

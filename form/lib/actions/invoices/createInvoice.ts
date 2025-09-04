@@ -124,6 +124,7 @@ export async function createInvoice(input: {
 	contactId: string;
 	proposalId: string;
 	amountExcludingGst: number;
+	userId?: string;
 	lineItems?: InvoiceCreateInput["line_items"];
 }): Promise<InvoiceRecord> {
 	const now = new Date();
@@ -139,10 +140,13 @@ export async function createInvoice(input: {
 
 	// Attempt to reuse the proposal's quote_id as invoice_id; if unavailable, derive from invoice numeric id after create
 	let invoiceNumber: string | undefined = undefined;
+	let dealId: string | undefined = undefined;
 	try {
-		const propRes = await getRequest<{ data: { quote_id?: string } }>(`/items/os_proposals/${encodeURIComponent(String(input.proposalId))}?fields=quote_id`);
+		const propRes = await getRequest<{ data: { quote_id?: string; deal?: string | number } }>(`/items/os_proposals/${encodeURIComponent(String(input.proposalId))}?fields=quote_id,deal`);
 		const qid = (propRes as any)?.data?.quote_id;
 		if (qid && String(qid).trim()) invoiceNumber = String(qid).trim();
+		const d = (propRes as any)?.data?.deal;
+		if (d) dealId = String(d);
 	} catch {}
 
 	const payload = {
@@ -159,6 +163,7 @@ export async function createInvoice(input: {
 		line_items: [],
 		amount_paid: 0,
 		amount_due: total,
+		...(input.userId ? { user: String(input.userId) } : {}),
 	};
 
 	try {
@@ -177,13 +182,27 @@ export async function createInvoice(input: {
 
 		// Build an absolute invoice link and patch the created invoice with it without removing other fields
 		try {
-			const base = (APP_BASE_URL || "").trim() || "http://localhost:8030";
+			const rawBase = (APP_BASE_URL || "").trim() || "http://localhost:8030";
+			// If APP_BASE_URL mistakenly points to Directus admin (e.g., http://localhost:8055/admin), strip the /admin suffix
+			const base = rawBase.replace(/\/admin(?:\/.*)?$/i, "");
 			const baseNoSlash = base.replace(/\/$/, "");
-			const queryParts: string[] = [
-				`invoiceId=${encodeURIComponent(String(created.id))}`,
-			];
-			if (input.proposalId) queryParts.push(`quoteId=${encodeURIComponent(String(input.proposalId))}`);
+			// Resolve propertyId from deal if available
+			let propertyId: string | undefined = undefined;
+			try {
+				if (dealId) {
+					const dealRes = await getRequest<{ data: { property?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=property`);
+					const p = (dealRes as any)?.data?.property;
+					if (p) propertyId = String(p);
+				}
+			} catch {}
+			const queryParts: string[] = [];
+			// Match the Step 05 canonical order: userId, contactId, dealId, propertyId, quoteId, invoiceId
+			if (input.userId) queryParts.push(`userId=${encodeURIComponent(String(input.userId))}`);
 			if (input.contactId) queryParts.push(`contactId=${encodeURIComponent(String(input.contactId))}`);
+			if (dealId) queryParts.push(`dealId=${encodeURIComponent(String(dealId))}`);
+			if (propertyId) queryParts.push(`propertyId=${encodeURIComponent(String(propertyId))}`);
+			if (input.proposalId) queryParts.push(`quoteId=${encodeURIComponent(String(input.proposalId))}`);
+			queryParts.push(`invoiceId=${encodeURIComponent(String(created.id))}`);
 			const invoiceLink = `${baseNoSlash}/steps/05-invoice?${queryParts.join("&")}`;
 
 			await updateInvoice(String(created.id), { invoice_link: invoiceLink });

@@ -10,12 +10,14 @@ import { createProposal } from "@/lib/actions/quotes/createQuote";
 import FormHeader from "@/components/ui/FormHeader";
 import FormFooter from "@/components/ui/FormFooter";
 import { getPhoneVerificationNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
+import { getUser } from "@/lib/actions/users/getUser";
 
 export default async function StepPhoneVerification({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
 	const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
 	const contactIdParam = typeof params.contactId === "string" ? params.contactId : undefined;
 	const propertyIdParam = typeof params.propertyId === "string" ? params.propertyId : undefined;
+	const userIdParam = typeof params.userId === "string" ? params.userId : undefined;
 	const quoteIdParam = typeof params.quoteId === "string" ? params.quoteId : undefined;
 
 	let phone: string | undefined = undefined;
@@ -35,20 +37,33 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 		// ignore
 	}
 
-	// Fetch contact details for phone and status
-	if (contactId) {
+	// Prefer user phone/status if available
+	if (userIdParam) {
 		try {
-			const res = await getContact(contactId);
-			const contact = (res as any)?.data as { phone?: string; status?: string } | null;
-			phone = contact?.phone ?? undefined;
-			status = (contact as any)?.status ?? undefined;
+			const user = await getUser(String(userIdParam));
+			if (user) {
+				phone = (user as any)?.phone ?? phone;
+				status = (user as any)?.status ?? status;
+			}
 		} catch {
 			// ignore
 		}
 	}
 
-	// If already verified/published, ensure a proposal exists and include quoteId in redirect
-	if (status === "published") {
+	// Fallback: fetch contact details for phone and status
+	if ((!phone || !status) && contactId) {
+		try {
+			const res = await getContact(contactId);
+			const contact = (res as any)?.data as { phone?: string; status?: string } | null;
+			phone = phone || (contact?.phone ?? undefined);
+			status = status || ((contact as any)?.status ?? undefined);
+		} catch {
+			// ignore
+		}
+	}
+
+	// If already verified (user active or contact published), ensure a proposal exists and include quoteId in redirect
+	if (status === "active" || status === "published") {
 		let quoteId: string | number | undefined = undefined;
 		if (quoteIdParam) {
 			quoteId = quoteIdParam;
@@ -85,7 +100,7 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 							note = estimate?.note || undefined;
 						} catch {}
 					}
-					const created = await createProposal({ dealId, contactId, propertyId, amount, note });
+					const created = await createProposal({ dealId, contactId, propertyId, amount, note, userId: userIdParam });
 					quoteId = created?.id;
 				}
 			} catch {
@@ -94,9 +109,10 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 		}
 
 		const paramsOut = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
-		if (dealId) paramsOut.set("dealId", String(dealId));
+		// Required order: userId, contactId, dealId, propertyId, quoteId
+		if (userIdParam) paramsOut.set("userId", String(userIdParam));
 		if (contactId) paramsOut.set("contactId", String(contactId));
+		if (dealId) paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
 		if (quoteId) paramsOut.set("quoteId", String(quoteId));
 		const to = `/steps/04-quote?${paramsOut.toString()}`;
@@ -120,13 +136,13 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 	return (
 		<div className="container">
 			<div className="card">
-				<FormHeader rightTitle="Phone verification" rightSubtitle={(status === "published") ? (<><strong>Status:</strong> Verified</>) : (<><strong>Status:</strong> Not verified</>)} />
+				<FormHeader rightTitle="Phone verification" rightSubtitle={(status === "active" || status === "published") ? (<><strong>Status:</strong> Verified</>) : (<><strong>Status:</strong> Not verified</>)} />
 				{phoneVerificationNote ? (
 					<div style={{ background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 }}>
 						<div>{phoneVerificationNote}</div>
 					</div>
 				) : null}
-				<TwilioSMSForm phone={phone} contactId={contactId} dealId={dealId} propertyId={propertyId} redirectSeconds={PHONE_VERIFIED_REDIRECT_SECONDS} quoteId={quoteIdParam} />
+				<TwilioSMSForm phone={phone} contactId={contactId} dealId={dealId} propertyId={propertyId} redirectSeconds={PHONE_VERIFIED_REDIRECT_SECONDS} quoteId={quoteIdParam} userId={userIdParam} />
 				<FormFooter termsLink={termsLink} />
 			</div>
 		</div>

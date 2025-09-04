@@ -1,8 +1,8 @@
 import InvoicesForm from "@/components/invoices/InvoicesForm";
-import { getRequest, patchRequest } from "@/lib/http/fetcher";
+import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
+import { DEAL_STAGE_PAYMENT_SUBMITTED_ID } from "@/lib/env";
 import { createInvoice, fetchGstRate, fetchCompanyInfo, fetchCustomerInfo, fetchPropertyInfo, InvoiceRecord } from "@/lib/actions/invoices/createInvoice";
 import { updateInvoice } from "@/lib/actions/invoices/updateInvoice";
-import { APP_BASE_URL } from "@/lib/env";
 import { redirect } from "next/navigation";
 import FormHeader from "@/components/ui/FormHeader";
 import FormFooter from "@/components/ui/FormFooter";
@@ -15,6 +15,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	const contactParamId = typeof params.contactId === "string" ? params.contactId : undefined;
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
+	const userId = typeof params.userId === "string" ? params.userId : undefined;
 
 	let proposal: any = null;
 	if (quoteId) {
@@ -78,7 +79,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	// Only create a new invoice if we don't have one and we have contact info
 	if (!invoice && contactId) {
 		try {
-			invoice = await createInvoice({ contactId, proposalId, amountExcludingGst: subtotal });
+			invoice = await createInvoice({ contactId, proposalId, amountExcludingGst: subtotal, userId });
 		} catch (error) {
 			return <div className="container"><div className="card">Failed to create invoice. Please try again.</div></div>;
 		}
@@ -88,19 +89,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 		return <div className="container"><div className="card">Failed to load invoice.</div></div>;
 	}
 
-	// Ensure invoice_link is saved with ALL incoming query params plus invoiceId
-	try {
-		const base = (APP_BASE_URL || "").trim() || "http://localhost:8030";
-		const baseNoSlash = base.replace(/\/$/, "");
-		const sp = new URLSearchParams();
-		for (const [key, value] of Object.entries(params)) {
-			if (typeof value === "string") sp.append(key, value);
-			else if (Array.isArray(value)) for (const v of value) sp.append(key, v);
-		}
-		sp.set("invoiceId", String((invoice as any).id));
-		const invoiceLink = `${baseNoSlash}/steps/05-invoice?${sp.toString()}`;
-		await updateInvoice(String((invoice as any).id), { invoice_link: invoiceLink });
-	} catch {}
+    // invoice_link is set during the accept-quote API flow to avoid SSR-time PATCH here.
 
 	// Build display line items from deal (service name + selected addons) without altering totals
 	let displayLineItems: Array<{ name: string; description?: string; quantity: number; unit_price: number; total: number }> = [];
@@ -164,13 +153,79 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	async function payNowAction() {
 		"use server";
 		const currentInvoiceId = String((invoice as any).id);
+		// Derive a stable paymentId to append to Step 06 URL
+		const paymentIdLocal = (() => {
+			try {
+				const invPublicId = String((invoice as any)?.invoice_id || "").trim();
+				if (invPublicId) return invPublicId;
+				const baseNum = Number((invoice as any)?.id);
+				return Number.isFinite(baseNum) ? String(100000 + baseNum) : String(Math.floor(100000 + Math.random() * 900000));
+			} catch {
+				return String(Math.floor(100000 + Math.random() * 900000));
+			}
+		})();
+		// Will capture UUID from Directus os_payments creation response
+		let paymentIdFromCreation: string | undefined = undefined;
+		// Create a pending os_payment record immediately on click (non-blocking)
+		try {
+			const invRes = await getRequest<{ data: any }>(`/items/os_invoices/${encodeURIComponent(currentInvoiceId)}?fields=id,amount_due,total,subtotal,contact,invoice_id`);
+			const invData = (invRes as any)?.data ?? {};
+			const amountTotal = (() => {
+				const primary = invData?.amount_due;
+				if (typeof primary === "number") return primary;
+				if (typeof primary === "string") {
+					const parsed = parseFloat(primary);
+					if (Number.isFinite(parsed)) return parsed;
+				}
+				const fallback = invData?.total ?? invData?.subtotal ?? 0;
+				return typeof fallback === "number" ? fallback : (Number.isFinite(parseFloat(String(fallback))) ? parseFloat(String(fallback)) : 0);
+			})();
+
+			const body: Record<string, unknown> = {
+				status: "submitted",
+				invoice: currentInvoiceId,
+				contact: (contactId || invData?.contact) ? String(contactId || invData.contact) : undefined,
+				amount: Number.isFinite(amountTotal) ? amountTotal : undefined,
+				...(userId ? { user: String(userId) } : {}),
+			};
+			try { console.log("[os_payments][step5] Creating submitted payment", body); } catch {}
+			const createdResp = await postRequest(`/items/os_payments`, body);
+			try { console.log("[os_payments][step5] Created response", createdResp); } catch {}
+			// After payment creation, change deal stage to PAYMENT_SUBMITTED if dealId available
+			try {
+				if (dealId && DEAL_STAGE_PAYMENT_SUBMITTED_ID) {
+					await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
+						deal_stage: DEAL_STAGE_PAYMENT_SUBMITTED_ID,
+					});
+				}
+			} catch (err) {
+				try { console.warn('[step5] failed to update deal stage to PAYMENT_SUBMITTED', err); } catch {}
+			}
+			// Prefer the Directus os_payment UUID if available
+			try {
+				const createdId = (createdResp as any)?.data?.id ?? (createdResp as any)?.id;
+				if (createdId) {
+					paymentIdFromCreation = String(createdId);
+				}
+			} catch {}
+		} catch {}
+
+		// Only change: set invoice status to approved
+		try { console.log("[invoice][pay-now] Setting invoice status to approved", { invoiceId: currentInvoiceId }); } catch {}
 		await updateInvoice(currentInvoiceId, { status: "approved" });
+		try { console.log("[invoice][pay-now] Invoice status set to approved", { invoiceId: currentInvoiceId }); } catch {}
+
 		const sp = new URLSearchParams();
-		sp.set("invoiceId", encodeURIComponent(currentInvoiceId));
-		if (dealId) sp.set("dealId", String(dealId));
+		// Ensure order: userId first, then contactId > dealId > propertyId > quoteId > invoiceId
+		if (userId) sp.set("userId", String(userId));
 		if (contactId) sp.set("contactId", String(contactId));
+		if (dealId) sp.set("dealId", String(dealId));
 		if (propertyId) sp.set("propertyId", String(propertyId));
 		if (quoteId) sp.set("quoteId", String(quoteId));
+		sp.set("invoiceId", encodeURIComponent(currentInvoiceId));
+		// Append paymentId at the end, preferring the Directus-created UUID
+		const paymentIdToUse = paymentIdFromCreation || paymentIdLocal;
+		sp.set("paymentId", String(paymentIdToUse));
 		redirect(`/steps/06-payment?${sp.toString()}`);
 	}
 
@@ -209,8 +264,8 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 					proposal: proposalId,
 					gst_rate: gstRateResult,
 					line_items: displayLineItems.length > 0 ? displayLineItems : ((invoice as any).line_items || []),
-					property: propertyInfoResult,
-				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} prevHref={`/steps/04-quote?dealId=${encodeURIComponent(String(dealId || ""))}&contactId=${encodeURIComponent(String(contactId || ""))}&propertyId=${encodeURIComponent(String(propertyId || ""))}&quoteId=${encodeURIComponent(String(quoteId || ""))}&invoiceId=${encodeURIComponent(String(invoiceId || ""))}`} payNowAction={payNowAction} />
+					property: propertyInfoResult || undefined,
+				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} prevHref={`/steps/04-quote?contactId=${encodeURIComponent(String(contactId || ""))}&dealId=${encodeURIComponent(String(dealId || ""))}&propertyId=${encodeURIComponent(String(propertyId || ""))}&quoteId=${encodeURIComponent(String(quoteId || ""))}&invoiceId=${encodeURIComponent(String(invoiceId || ""))}${userId ? `&userId=${encodeURIComponent(String(userId))}` : ""}`} payNowAction={payNowAction} />
 				<FormFooter termsLink={termsLink} />
 			</div>
 		</div>

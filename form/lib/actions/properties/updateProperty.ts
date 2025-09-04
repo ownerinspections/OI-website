@@ -12,8 +12,8 @@ export async function updateProperty(
 	data: PropertyUpdateInput,
 	options?: { publish?: boolean }
 ): Promise<PropertyRecord> {
-	const shouldPublish = options?.publish !== undefined ? options.publish : true;
-	const payload: Record<string, unknown> = shouldPublish ? { ...data, status: "published" } : { ...data };
+	const _shouldPublish = options?.publish !== undefined ? options.publish : true;
+	const payload: Record<string, unknown> = { ...data };
 	const res = await patchRequest<DirectusItemResponse<PropertyRecord>>(`/items/property/${id}`, payload);
 	return res?.data as PropertyRecord;
 }

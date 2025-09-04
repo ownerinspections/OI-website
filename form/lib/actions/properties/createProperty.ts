@@ -7,6 +7,7 @@ type DirectusItemResponse<T> = { data: T };
 export type PropertyRecord = {
 	id: string;
 	status?: "draft" | "published" | string;
+	user?: string;
 	property_category?: "residential" | "commercial" | string;
 	property_type?: string;
 	street_address?: string;
@@ -42,7 +43,6 @@ export type PropertyCreateInput = Omit<PropertyRecord, "id" | "status">;
 export async function createProperty(data: PropertyCreateInput): Promise<PropertyRecord> {
 	const payload: Record<string, unknown> = {
 		...data,
-		status: "published",
 	};
 
 	const res = await postRequest<DirectusItemResponse<PropertyRecord>>("/items/property", payload);

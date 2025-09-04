@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
 import { patchRequest, getRequest } from "@/lib/http/fetcher";
+import { DEAL_STAGE_INVOICE_SUBMITTED_ID } from "@/lib/env";
 import { createInvoice, fetchGstRate } from "@/lib/actions/invoices/createInvoice";
 
 export async function POST(req: Request) {
 	try {
 		const body = await req.json();
-		const { quoteId, dealId, contactId, propertyId, totalAmount, invoiceId: providedInvoiceId } = body;
+		const { quoteId, dealId, contactId, propertyId, totalAmount, invoiceId: providedInvoiceId, userId } = body;
+
+		// Change deal stage to "Invoice Submitted" before any other actions
+		try {
+			if (dealId && DEAL_STAGE_INVOICE_SUBMITTED_ID) {
+				await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
+					deal_stage: DEAL_STAGE_INVOICE_SUBMITTED_ID,
+				});
+			}
+		} catch (err) {
+			try { console.warn('[approve-and-create-invoice] failed to update deal stage to INVOICE_SUBMITTED', err); } catch {}
+		}
 
 		if (!quoteId) {
 			return NextResponse.json({ error: "Missing quoteId" }, { status: 400 });
@@ -39,7 +51,8 @@ export async function POST(req: Request) {
 				const invoice = await createInvoice({ 
 					contactId, 
 					proposalId: String(quoteId), 
-					amountExcludingGst: Number(totalAmount || 0) 
+					amountExcludingGst: Number(totalAmount || 0),
+					userId: userId ? String(userId) : undefined,
 				});
 				invoiceId = String(invoice.id);
 				console.log('Invoice created successfully:', invoiceId);

@@ -14,6 +14,7 @@ type Props = {
 	property?: PropertyRecord;
 	propertyId?: string;
 	contactId?: string;
+	userId?: string;
 	dealId?: string;
 	quoteId?: string;
 	serviceId?: number;
@@ -25,7 +26,7 @@ type Props = {
 
 type ActionState = Awaited<ReturnType<typeof submitProperty>>;
 
-export default function PropertiesForm({ property, propertyId, contactId, dealId, quoteId, serviceId, serviceName, propertyCategory, propertyNote, onExtract }: Props) {
+export default function PropertiesForm({ property, propertyId, contactId, userId, dealId, quoteId, serviceId, serviceName, propertyCategory, propertyNote, onExtract }: Props) {
 	const initialState: ActionState = {} as any;
 	const [state, formAction] = useActionState<ActionState, FormData>(submitProperty, initialState);
 	const [submitted, setSubmitted] = useState<boolean>(false);
@@ -60,7 +61,7 @@ export default function PropertiesForm({ property, propertyId, contactId, dealId
 	}>({});
 	const [clientInfo, setClientInfo] = useState<any>(null);
 	const [realestateUrl, setRealestateUrl] = useState<string>("");
-	const [extractedAgents, setExtractedAgents] = useState<Array<{ first_name?: string; last_name?: string; mobile?: string }>>([]);
+	const [extractedAgents, setExtractedAgents] = useState<Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }>>([]);
 
 	// When editing an existing property (propertyId present), prefill quoting fields and show them
 	const [initializedFromProperty, setInitializedFromProperty] = useState<boolean>(false);
@@ -377,6 +378,7 @@ export default function PropertiesForm({ property, propertyId, contactId, dealId
 
 			<form action={formAction} className="form-grid" style={gridStyle} noValidate aria-busy={extracting} onSubmit={() => setSubmitted(true)}>
 				<input type="hidden" name="contact_id" value={contactId ?? ""} />
+				<input type="hidden" name="user_id" value={userId ?? ""} />
 				<input type="hidden" name="deal_id" value={dealId ?? ""} />
 				<input type="hidden" name="property_id" value={property?.id ?? propertyId ?? ""} />
 				<input type="hidden" name="quote_id" value={quoteId ?? ""} />
@@ -675,6 +677,7 @@ export default function PropertiesForm({ property, propertyId, contactId, dealId
 						<input type="hidden" name={`agent_${idx}_first_name`} value={a?.first_name ?? ""} />
 						<input type="hidden" name={`agent_${idx}_last_name`} value={a?.last_name ?? ""} />
 						<input type="hidden" name={`agent_${idx}_mobile`} value={a?.mobile ?? ""} />
+						<input type="hidden" name={`agent_${idx}_email`} value={a?.email ?? ""} />
 					</div>
 				))}
 				<input

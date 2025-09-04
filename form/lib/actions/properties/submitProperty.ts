@@ -15,6 +15,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 	const property_id = String(formData.get("property_id") ?? "").trim();
 	const deal_id = String(formData.get("deal_id") ?? "").trim();
 	const contact_id = String(formData.get("contact_id") ?? "").trim();
+	const user_id = String(formData.get("user_id") ?? "").trim();
 
 	const number_of_bedrooms = String(formData.get("number_of_bedrooms") ?? "").trim();
 	const number_of_bathrooms = String(formData.get("number_of_bathrooms") ?? "").trim();
@@ -54,13 +55,13 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 
 	// Extracted listing info (hidden): realestate URL and up to several agents
 	const realestate_url = String(formData.get("realestate_url") ?? "").trim();
-	let extractedAgents: Array<{ first_name?: string; last_name?: string; mobile?: string }> = [];
+	let extractedAgents: Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }> = [];
 	const agentsJsonRaw = String(formData.get("agents_json") ?? "").trim();
 	if (agentsJsonRaw) {
 		try {
 			const arr = JSON.parse(agentsJsonRaw);
 			if (Array.isArray(arr)) {
-				extractedAgents = arr as Array<{ first_name?: string; last_name?: string; mobile?: string }>;
+				extractedAgents = arr as Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }>;
 			}
 		} catch {}
 	}
@@ -69,7 +70,8 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			const fn = String(formData.get(`agent_${i}_first_name`) ?? "").trim();
 			const ln = String(formData.get(`agent_${i}_last_name`) ?? "").trim();
 			const mb = String(formData.get(`agent_${i}_mobile`) ?? "").trim();
-			if (fn || ln || mb) extractedAgents.push({ first_name: fn, last_name: ln, mobile: mb });
+			const em = String(formData.get(`agent_${i}_email`) ?? "").trim();
+			if (fn || ln || mb || em) extractedAgents.push({ first_name: fn, last_name: ln, mobile: mb, email: em });
 		}
 	}
 
@@ -146,6 +148,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			// Relations
 			contact: contact_id || null,
 			deals: deal_id || null,
+			...(user_id ? { user: user_id } : {}),
 		};
 
 		let resultingPropertyId: string | undefined = undefined;
@@ -166,6 +169,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 		}
 
 		const next = new URL("/steps/03-phone-verification", "http://localhost");
+		if (user_id) next.searchParams.set("userId", user_id);
 		if (contact_id) next.searchParams.set("contactId", contact_id);
 		if (deal_id) next.searchParams.set("dealId", deal_id);
 		if (resultingPropertyId) next.searchParams.set("propertyId", String(resultingPropertyId));

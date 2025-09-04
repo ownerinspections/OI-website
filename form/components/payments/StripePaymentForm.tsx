@@ -12,14 +12,25 @@ type Props = {
     publishableKey: string;
     returnUrl?: string;
     prevHref?: string;
+    paymentId?: string;
 };
 
-function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref }: { receiptHref: string; returnUrl?: string; clientSecret: string; prevHref?: string }) {
+function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref, invoiceId, paymentId }: { receiptHref: string; returnUrl?: string; clientSecret: string; prevHref?: string; invoiceId: string; paymentId?: string }) {
     const stripe = useStripe();
     const elements = useElements();
     const [submitting, setSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
+
+    const postUpdate = async (payload: Record<string, unknown>) => {
+        try {
+            await fetch("/api/payments/update-from-pi", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ invoiceId, paymentId, ...payload }),
+            });
+        } catch {}
+    };
 
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,24 +38,41 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref }: { receip
         if (!stripe || !elements) return;
         setSubmitting(true);
         try {
-            const { error } = await stripe.confirmPayment({
+            const { error, paymentIntent } = await stripe.confirmPayment({
                 elements,
                 confirmParams: returnUrl ? { return_url: returnUrl } : {},
                 redirect: "if_required",
             });
             if (error) {
                 setErrorMessage(error.message || "Payment failed. Please try again.");
+                // On failure, prefer error.payment_intent for most recent attempt state; fallback to retrieve
+                try {
+                    const anyErr = error as any;
+                    const piFromError = anyErr?.payment_intent as { id?: string; client_secret?: string } | undefined;
+                    if (piFromError && piFromError.id) {
+                        await postUpdate({ payment_intent_id: piFromError.id, client_secret: piFromError.client_secret || clientSecret });
+                    } else {
+                        // If PI not present, still update the payment with error details
+                        await postUpdate({
+                            error_code: anyErr?.code,
+                            error_decline_code: anyErr?.decline_code,
+                            error_message: error.message,
+                        });
+                    }
+                } catch {}
                 return;
             }
             // Retrieve PaymentIntent to include identifiers in redirect query for SSR receipt patching
             try {
-                const retrieved = await stripe.retrievePaymentIntent(clientSecret);
-                const pi = retrieved.paymentIntent;
-                if (pi && pi.id) {
+                // Prefer the paymentIntent returned by confirmPayment if available; otherwise retrieve
+                const pi = paymentIntent || (await stripe.retrievePaymentIntent(clientSecret)).paymentIntent;
+                if (pi && (pi as any).id) {
+                    // Also post an update to ensure any non-success state is stored before redirect
+                    try { await postUpdate({ payment_intent_id: (pi as any).id, client_secret: clientSecret }); } catch {}
                     const url = new URL(receiptHref, window.location.origin);
-                    url.searchParams.set("payment_intent", pi.id);
-                    if (typeof pi.client_secret === "string") {
-                        url.searchParams.set("payment_intent_client_secret", pi.client_secret);
+                    url.searchParams.set("payment_intent", (pi as any).id);
+                    if (typeof (pi as any).client_secret === "string") {
+                        url.searchParams.set("payment_intent_client_secret", (pi as any).client_secret);
                     }
                     window.location.href = url.toString();
                     return;
@@ -72,7 +100,7 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref }: { receip
     );
 }
 
-export default function StripePaymentForm({ clientSecret, invoiceId, receiptHref, publishableKey, returnUrl, prevHref }: Props) {
+export default function StripePaymentForm({ clientSecret, invoiceId, receiptHref, publishableKey, returnUrl, prevHref, paymentId }: Props) {
     const stripePromise = useMemo(() => {
         const key = (publishableKey || "").trim();
         if (!key) return null;
@@ -100,7 +128,7 @@ export default function StripePaymentForm({ clientSecret, invoiceId, receiptHref
 
     return (
         <Elements stripe={stripePromise} options={options}>
-            <InlineForm receiptHref={receiptHref} returnUrl={returnUrl} clientSecret={clientSecret} prevHref={prevHref} />
+            <InlineForm receiptHref={receiptHref} returnUrl={returnUrl} clientSecret={clientSecret} prevHref={prevHref} invoiceId={invoiceId} paymentId={paymentId} />
         </Elements>
     );
 }

@@ -36,7 +36,7 @@ export type ExtractionResult = {
   realestate_url?: string | "N/A";
   quoting_info: QuotingInfo;
   client_info: ClientInfo;
-  agents?: Array<{ first_name?: string; last_name?: string; mobile?: string }>;
+  agents?: Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }>;
   free_text_notes: string;
 };
 
@@ -57,6 +57,9 @@ export async function extractPropertyDetails(input: { address: string }): Promis
     systemPrompt = await loadSystemPrompt();
   } catch (e) {
     console.error("[extractPropertyDetails] failed to load system prompt", e);
+    try {
+      console.warn("[extractPropertyDetails] issue", { stage: "prompt_load_failed" });
+    } catch {}
     return null;
   }
   const userContent = input.address;
@@ -148,6 +151,13 @@ export async function extractPropertyDetails(input: { address: string }): Promis
     console.log("[extractPropertyDetails] status=", res.status, "ms=", ms, "rawLen=", text?.length ?? 0);
     if (!res.ok) {
       console.error("[extractPropertyDetails] error body (first 500)", text.slice(0, 500));
+      try {
+        console.warn("[extractPropertyDetails] issue", {
+          stage: "http_error",
+          status: res.status,
+          bodyPreview: text.slice(0, 500),
+        });
+      } catch {}
       return null;
     }
     let json: OpenAIResponse = {} as any;
@@ -166,12 +176,50 @@ export async function extractPropertyDetails(input: { address: string }): Promis
       // Last resort: raw text
       content = text;
     }
-    console.log("[extractPropertyDetails] raw content (first 500)", content?.slice?.(0, 500));
+    console.log("[extractPropertyDetails] raw content length=", content?.length ?? 0);
+    console.log("[extractPropertyDetails] raw content:\n", content);
     const parsed = tryParseExtraction(content);
     console.log("[extractPropertyDetails] parsed", parsed ? "ok" : "null");
+    if (!parsed) {
+      try {
+        console.warn("[extractPropertyDetails] issue", {
+          stage: "parse_failed",
+          contentPreview: (content || "").slice(0, 500),
+        });
+      } catch {}
+      return null;
+    }
+    // Validate usable quoting info presence
+    const q = parsed.quoting_info as any;
+    const hasUsable = Boolean(
+      (q?.property_classification && q.property_classification !== "N/A") ||
+      (q?.property_type && q.property_type !== "N/A") ||
+      (typeof q?.bedrooms_including_study === "number") ||
+      (typeof q?.bathrooms_rounded === "number") ||
+      (typeof q?.levels === "number") ||
+      (q?.has_basement_or_subfloor && q.has_basement_or_subfloor !== "N/A") ||
+      (Array.isArray(q?.additional_structures) && q.additional_structures.length > 0)
+    );
+    if (!hasUsable) {
+      try {
+        console.warn("[extractPropertyDetails] issue", {
+          stage: "no_usable_quoting_info",
+          quoting_info: q ?? null,
+          inputAddress: userContent,
+          promptChars: String(payload.input || "").length,
+          websearch: !!(payload as any).tools,
+        });
+      } catch {}
+    }
     return parsed;
   } catch (_err) {
     console.error("[extractPropertyDetails] request error", _err);
+    try {
+      console.warn("[extractPropertyDetails] issue", {
+        stage: "request_exception",
+        error: (_err as any)?.message ?? String(_err),
+      });
+    } catch {}
     return null;
   }
 }

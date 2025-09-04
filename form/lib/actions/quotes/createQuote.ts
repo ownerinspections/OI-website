@@ -1,7 +1,7 @@
 "use server";
 
 import { getRequest, postRequest, patchRequest } from "@/lib/http/fetcher";
-import { APP_BASE_URL, PROPOSAL_EXPIRY_DAYS, PROPOSAL_NAME, PROPOSAL_STATUS } from "@/lib/env";
+import { APP_BASE_URL, PROPOSAL_EXPIRY_DAYS, PROPOSAL_NAME, PROPOSAL_STATUS, DEAL_STAGE_QUOTE_SUBMITTED_ID } from "@/lib/env";
 
 type DirectusItemResponse<T> = { data: T };
 
@@ -60,7 +60,18 @@ export async function createProposal(params: {
 	propertyId?: string | number;
 	amount: number;
 	note?: string | null;
+	userId?: string | number;
 }): Promise<ProposalRecord> {
+	// Change deal stage to "Quote Submitted" before any other actions
+	try {
+		if (DEAL_STAGE_QUOTE_SUBMITTED_ID) {
+			await patchRequest(`/items/os_deals/${encodeURIComponent(String(params.dealId))}`, {
+				deal_stage: DEAL_STAGE_QUOTE_SUBMITTED_ID,
+			});
+		}
+	} catch (err) {
+		try { console.warn("[createProposal] failed to update deal stage to QUOTE_SUBMITTED", err); } catch {}
+	}
 	const now = new Date();
 	const expiry = new Date(now.getTime() + Math.max(1, PROPOSAL_EXPIRY_DAYS || 7) * 24 * 60 * 60 * 1000);
 	let contactIdStr: string | undefined = params.contactId !== undefined ? String(params.contactId) : undefined;
@@ -71,18 +82,30 @@ export async function createProposal(params: {
 			if (dContact) contactIdStr = String(dContact);
 		} catch {}
 	}
+
+	console.log("[createProposal] Input params", {
+		dealId: params.dealId,
+		contactId: contactIdStr || params.contactId,
+		propertyId: params.propertyId,
+		amount: params.amount,
+		note: params.note,
+		userId: params.userId,
+	});
 	const payload = {
 		name: PROPOSAL_NAME,
 		deal: String(params.dealId),
 		...(contactIdStr ? { contact: contactIdStr } : {}),
+		...(params.userId !== undefined ? { user: String(params.userId) } : {}),
 		status: PROPOSAL_STATUS,
 		expiration_date: expiry.toISOString(),
 		note: params.note || "Proposal subject to confirmation. Final terms will be outlined in the agreement.",
 		quote_amount: params.amount,
 		inspection_amount: params.amount,
 	};
+	console.log("[createProposal] POST /items/os_proposals payload", payload);
 	const res = await postRequest<{ data: ProposalRecord }>("/items/os_proposals", payload);
 	const created = (res as any)?.data as ProposalRecord;
+	console.log("[createProposal] Created proposal response", created);
 
 	// After creation, patch the proposal with a full quote URL (quote_link)
 	try {
@@ -97,10 +120,11 @@ export async function createProposal(params: {
 			return `${protocol}://${host}${port ? `:${port}` : ""}`.replace(/\/$/, "");
 		})();
 		const urlParams = new URLSearchParams();
-		urlParams.set("quoteId", String(created.id));
-		if (params.dealId !== undefined) urlParams.set("dealId", String(params.dealId));
+		// Standard order for step 4 links: contactId, dealId, propertyId, quoteId
 		if (params.contactId !== undefined) urlParams.set("contactId", String(params.contactId));
+		if (params.dealId !== undefined) urlParams.set("dealId", String(params.dealId));
 		if (params.propertyId !== undefined) urlParams.set("propertyId", String(params.propertyId));
+		urlParams.set("quoteId", String(created.id));
 		const fullUrl = `${base}/steps/04-quote?${urlParams.toString()}`;
 		const baseId = Number(created.id);
 		const sequentialId = Number.isFinite(baseId) ? String(100000 + baseId) : String(Math.floor(100000 + Math.random() * 900000));

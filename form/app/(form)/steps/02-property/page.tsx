@@ -12,6 +12,7 @@ export default async function StepProperty({ searchParams }: { searchParams?: Pr
 	const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const contactId = typeof params.contactId === "string" ? params.contactId : undefined;
+	const userId = typeof params.userId === "string" ? params.userId : undefined;
 	const quoteId = typeof params.quoteId === "string" ? params.quoteId : undefined;
 
 	const [property, deal, propertyNote, termsLink] = await Promise.all([
@@ -32,6 +33,7 @@ export default async function StepProperty({ searchParams }: { searchParams?: Pr
 					property={property}
 					propertyId={propertyId}
 					contactId={contactId}
+					userId={userId}
 					dealId={dealId}
 					quoteId={quoteId}
 					serviceId={serviceId}

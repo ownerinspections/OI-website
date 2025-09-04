@@ -9,7 +9,7 @@ Follow these rules:
 6. Property type: one of House, Townhouse, Apartment/Unit, Villa, Duplex, Other.
 7. Basement/subfloor: return Yes if any of basement parking, basement, undercroft, subfloor crawlspace is indicated. Otherwise No or "N/A" if not determinable.
 8. Additional structures: detect and list any of the following if present on the site or in the listing: Shed, Granny flat.
-9. Prefer primary sources. Start with realestate.com.au first, then domain.com.au, then onthehouse.com.au, then council planning pages, strata listing PDFs, sales brochures. Include the exact source URLs used. Always include the primary realestate.com.au listing URL used as "realstate_url" if available.
+9. Prefer primary sources. Start with realestate.com.au first for property details and listing agent names, then domain.com.au, then onthehouse.com.au, then council planning pages, strata listing PDFs, sales brochures. Agent names MUST be taken from the realestate.com.au page for the specific property when available. Agent phone numbers and emails may be sourced from any reputable public site on the internet; prefer the official agency website (agent profile or property page) when available, but it is not required. For Buxton listings, prefer buxton.com.au (agent profile or property page) for both mobile and email when available. Only use a source if it shows a full, unmasked value. Include the exact source URLs used for each phone and each email. Always include the primary realestate.com.au listing URL used as "realestate_url" if available.
 10. If multiple conflicting sources exist, pick the most recent and add a conflict note in free_text_notes.
 11. Do not include any commentary outside the JSON.
 
@@ -45,17 +45,34 @@ Output must always follow this schema:
     ]
   },
   "agents": [
-    { "first_name": "string | N/A", "last_name": "string | N/A", "mobile": "string | N/A" }
+    { "first_name": "string | N/A", "last_name": "string | N/A", "mobile": "E.164 string (+61XXXXXXXXX) | N/A", "email": "string (valid email) | N/A" }
   ],
   "free_text_notes": "Any conflict notes or clarifications, max 3 lines."
 }
-
 Validation rules before returning:
 • If bathrooms presented as 1.5, 2.5, 3.5 etc, round up to 2, 3, 4 respectively in bathrooms_rounded.  
 • If listing shows WC only on a level, do not count as a bathroom unless basin and toilet are explicit. Still apply rounding rule if a half bath exists.  
 • For bedrooms_including_study, only include studies or media rooms if the source explicitly names them. Do not infer from photos alone.  
 • If multiple sources disagree on counts, choose the majority from the most recent listings and place the alternative in free_text_notes with URLs.  
 • Always include at least one source URL. If none found, return "N/A" in fields and place "No public source found" in free_text_notes.  
-• Extract up to three listing agents if available from the listing pages; include their first_name, last_name, and mobile number in the agents array. If not available, return an empty array.  
+• Extract up to three listing agents as shown on the realestate.com.au property page; take first_name and last_name from realestate.com.au. Include mobile and email if found from reputable sources. If no agents are shown on realestate.com.au, return an empty array.  
 • If multiple listing pages exist, prefer the most complete agent information and set that page as realestate_url.
 • Dates must be formatted as "Month YYYY" (e.g., "August 2025"). Do not use ISO "YYYY-MM".
+• For each agents[].mobile, return a full Australian E.164 number: "+61" followed by 9 digits, no spaces or punctuation (e.g., "+61412345678"). Strip all non-digits except the leading "+".
+• If a local AU mobile starting with "0" is found, convert "04XXXXXXXX" → "+614XXXXXXXX". Remove spaces, hyphens, and parentheses.
+• Do not return partial, masked, or obfuscated numbers (e.g., "0400 XXX XXX"). If the full number cannot be verified from a public source, set "mobile" to "N/A".
+• Prefer sourcing agent mobiles from the agency’s official website. If unavailable, you may use the listing site or other reputable public sources that display the complete, unmasked E.164 number. Include the exact source URL used. Do not prefer realestate.com.au for phone unless it shows the complete, unmasked value and is the best available source.
+• If a page shows masked digits (e.g., "+6140…" or "+6140..."), follow this procedure: (1) search the agent name on the agency website (use a site-restricted search like site:buxton.com.au "<first name> <last name>"); (2) open the agent profile OR the same property page on the agency site; (3) extract the number from the visible text or tel: hyperlink and normalize to E.164.
+• Record the exact URL used to obtain each agent’s mobile in free_text_notes in the form: "Agent <First Last> mobile source: <URL>".
+• Hard constraint: agents[].mobile must match this regex exactly: ^\+61\d{9}$. No spaces, hyphens, parentheses, or other characters.
+• Hard constraint: Never output ellipses or masked digits in agents[].mobile (characters like …, ..., x, X, *). If the full number cannot be verified from public sources, set agents[].mobile to "N/A".
+• Hard constraint (Buxton): If the property is represented by Buxton, agents[].mobile MUST be obtained from buxton.com.au when available; do not use realestate.com.au numbers even if unmasked unless buxton.com.au provides no mobile.
+• If browsing/tools are unavailable and you cannot verify the full number on the agency site, return "N/A" instead of a partial.
+• Do not infer digits from images or non-authoritative sources.
+
+Email sourcing and validation:
+• Prefer the agency’s official website (agent profile or property page). If unavailable, you may use other reputable public sources that show the full, unmasked email address. Prefer emails on the agency’s domain; if multiple are present, choose the agency-domain email. Accept only plain-text emails, not images or contact forms.
+• agents[].email must be lowercase and match a standard email pattern (e.g., ^[^\s@]+@[^\s@]+\.[^\s@]+$). If the email is obfuscated, image-only, or uncertain, return "N/A".
+• Record the exact URL used to obtain each agent’s email in free_text_notes in the form: "Agent <First Last> email source: <URL>".
+• For Buxton, prefer buxton.com.au for agent email when available.
+

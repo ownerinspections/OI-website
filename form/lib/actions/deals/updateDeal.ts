@@ -13,6 +13,7 @@ export type DealUpdateInput = Partial<{
 	service: number;
 	property?: string;
 	addons?: number[];
+	user?: string;
 }>;
 
 export type DealRecord = {

@@ -60,16 +60,17 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 	useEffect(() => {
 		if (state?.success && state?.contactId && state?.dealId) {
 			const url = new URL(`/steps/02-property`, window.location.origin);
-			// Standard order: dealId, contactId, propertyId, quoteId
-			url.searchParams.set("dealId", String(state.dealId));
+			// Required order: userId, contactId, dealId, propertyId, quoteId
+			if (state?.userId) url.searchParams.set("userId", state.userId);
 			url.searchParams.set("contactId", state.contactId);
+			url.searchParams.set("dealId", String(state.dealId));
 			if (propertyId) url.searchParams.set("propertyId", propertyId);
 			const currentUrl = new URL(window.location.href);
 			const quoteId = currentUrl.searchParams.get("quoteId");
 			if (quoteId) url.searchParams.set("quoteId", quoteId);
 			router.replace(url.toString());
 		}
-	}, [state?.success, state?.contactId, state?.dealId, propertyId, router]);
+	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId, router]);
 
 	const formStyle: React.CSSProperties = {
 		display: "grid",

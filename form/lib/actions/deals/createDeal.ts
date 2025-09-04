@@ -13,6 +13,7 @@ export type DealInput = {
 	contact: string;
 	service: number;
 	property?: string;
+	user?: string;
 };
 
 export type DealRecord = {
@@ -28,6 +29,7 @@ export async function createDeal(data: DealInput) {
 		contact: data.contact,
 		service: data.service,
 		...(data.property ? { property: data.property } : {} as any),
+		...(data.user ? { user: data.user } : {} as any),
 	};
 
 	const res = await postRequest<DirectusItemResponse<DealRecord>>("/items/os_deals", payload as unknown as Record<string, unknown>);

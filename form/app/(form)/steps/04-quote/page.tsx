@@ -1,6 +1,7 @@
 import QuotesForm from "@/components/quotes/QuotesForm";
 import { getQuote } from "@/lib/actions/quotes/getQuote";
 import { getRequest } from "@/lib/http/fetcher";
+import { patchRequest } from "@/lib/http/fetcher";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { getServiceById } from "@/lib/actions/services/getService";
 import { getProperty } from "@/lib/actions/properties/getProperty";
@@ -14,11 +15,15 @@ import FormFooter from "@/components/ui/FormFooter";
 
 export default async function StepQuote({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
+	const userId = typeof params.userId === "string" ? params.userId : undefined;
 	const quoteId = typeof params.quoteId === "string" ? params.quoteId : undefined;
 	const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
 	const contactId = typeof params.contactId === "string" ? params.contactId : undefined;
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
+
+	// Server-side trace for debugging user linkage
+	console.log("[StepQuote] Params parsed", { userId, quoteId, dealId, contactId, propertyId, invoiceId });
 
 	let proposal: any = null;
 	if (quoteId) {
@@ -53,6 +58,17 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		}
 	}
 
+	// If we have a proposal loaded and a userId in URL but proposal.user is missing, patch it now
+	if (proposal && userId && !(proposal as any)?.user) {
+		try {
+			console.log("[StepQuote] Patching proposal user", { proposalId: (proposal as any)?.id, userId });
+			await patchRequest(`/items/os_proposals/${encodeURIComponent(String((proposal as any).id))}`, { user: String(userId) });
+			console.log("[StepQuote] Patched proposal user successfully");
+		} catch (err) {
+			console.warn("[StepQuote] Failed to patch proposal user", err);
+		}
+	}
+
 	// If still no proposal, attempt to create one now using rate estimate
 	if (!proposal && dealId) {
 		const deal = await getDeal(dealId);
@@ -79,25 +95,31 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 				note = estimate?.note || undefined;
 			} catch {}
 		}
-		const created = await createProposal({ dealId, contactId, propertyId, amount, note });
+		console.log("[StepQuote] Creating proposal with", { dealId, contactId, propertyId, amount, note, userId });
+		const created = await createProposal({ dealId, contactId, propertyId, amount, note, userId });
+		console.log("[StepQuote] Proposal created", { id: (created as any)?.id, created });
 		// After creating the proposal (quote), redirect to include quoteId in URL
 		const paramsOut = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
-		if (dealId) paramsOut.set("dealId", String(dealId));
+		// Standard order: contactId, dealId, propertyId, quoteId
 		if (contactId) paramsOut.set("contactId", String(contactId));
+		if (dealId) paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
+		if (userId) paramsOut.set("userId", String(userId));
 		paramsOut.set("quoteId", String(created.id));
 		redirect(`/steps/04-quote?${paramsOut.toString()}`);
 	}
 
 	// Final fallback: if still no proposal and we have a deal, create a minimal proposal
 	if (!proposal && dealId) {
-		const created = await createProposal({ dealId, contactId, propertyId, amount: 0, note: undefined });
+		console.log("[StepQuote] Creating minimal proposal with", { dealId, contactId, propertyId, userId });
+		const created = await createProposal({ dealId, contactId, propertyId, amount: 0, note: undefined, userId });
+		console.log("[StepQuote] Minimal proposal created", { id: (created as any)?.id, created });
 		const paramsOut = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
-		paramsOut.set("dealId", String(dealId));
+		// Standard order: contactId, dealId, propertyId, quoteId
 		if (contactId) paramsOut.set("contactId", String(contactId));
+		paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
+		if (userId) paramsOut.set("userId", String(userId));
 		paramsOut.set("quoteId", String(created.id));
 		redirect(`/steps/04-quote?${paramsOut.toString()}`);
 	}
@@ -211,7 +233,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						{ label: "Expiry Date", value: expiryDateFmt },
 					]}
 				/>
-				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} />
+				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} />
 				<FormFooter termsLink={termsLink} />
 			</div>
 		</div>

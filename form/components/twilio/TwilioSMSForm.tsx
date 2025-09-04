@@ -11,9 +11,9 @@ import AlreadyVerified from "@/components/twilio/AlreadyVerified";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import NextButton from "@/components/ui/controls/NextButton";
 
-type Props = { phone?: string; contactId?: string; dealId?: string; propertyId?: string; quoteId?: string; redirectSeconds?: number };
+type Props = { phone?: string; contactId?: string; dealId?: string; propertyId?: string; quoteId?: string; userId?: string; redirectSeconds?: number };
 
-export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, quoteId, redirectSeconds = 3 }: Props) {
+export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, quoteId, userId, redirectSeconds = 3 }: Props) {
 	const router = useRouter();
 	const [isEditing, setIsEditing] = useState<boolean>(false);
 	const [currentPhone, setCurrentPhone] = useState<string | undefined>(phone);
@@ -205,8 +205,10 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 			// Refresh the server-rendered page so header status reflects "Verified"
 			try { router.refresh(); } catch {}
 			const params = new URLSearchParams();
-			if (dealId) params.set("dealId", String(dealId));
+			// Required order: userId, contactId, dealId, propertyId, quoteId
+			if (userId) params.set("userId", String(userId));
 			if (contactId) params.set("contactId", String(contactId));
+			if (dealId) params.set("dealId", String(dealId));
 			const nextObj: any = (verifyState as any).next || {};
 			if (nextObj && nextObj.propertyId) {
 				params.set("propertyId", String(nextObj.propertyId));
@@ -218,7 +220,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 			const url = `/steps/04-quote?${params.toString()}`;
 			setVerifiedTo(url);
 		}
-	}, [verifyState, dealId, contactId, propertyId, quoteId, router]);
+	}, [verifyState, dealId, contactId, propertyId, quoteId, userId, router]);
 
 	function formatDisplayPhone(e164?: string): string {
 		if (!e164) return "-";
@@ -249,14 +251,15 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 
 	const prevHref = useMemo(() => {
 		const params = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
-		if (dealId) params.set("dealId", String(dealId));
+		// Required order: userId, contactId, dealId, propertyId, quoteId
+		if (userId) params.set("userId", String(userId));
 		if (contactId) params.set("contactId", String(contactId));
+		if (dealId) params.set("dealId", String(dealId));
 		if (propertyId) params.set("propertyId", String(propertyId));
 		if (quoteId) params.set("quoteId", String(quoteId));
 		const qs = params.toString();
 		return qs ? `/steps/02-property?${qs}` : "/steps/02-property";
-	}, [dealId, contactId, propertyId, quoteId]);
+	}, [dealId, contactId, propertyId, quoteId, userId]);
 
 
 
@@ -301,6 +304,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 							<input type="hidden" name="contact_id" value={contactId ?? ""} />
 							<input type="hidden" name="deal_id" value={dealId ?? ""} />
 							<input type="hidden" name="property_id" value={propertyId ?? ""} />
+							<input type="hidden" name="user_id" value={userId ?? ""} />
 
 							<div style={{ ...actionsStyle }}>
 								<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={() => { console.log("[change number] clicked"); setIsEditing(true); setUpdateSuccess(undefined); setSendError(undefined); setSendGateError(""); }}>Change number</button>
@@ -345,6 +349,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 							<input type="hidden" name="contact_id" value={contactId ?? ""} />
 							<input type="hidden" name="deal_id" value={dealId ?? ""} />
 							<input type="hidden" name="property_id" value={propertyId ?? ""} />
+							<input type="hidden" name="user_id" value={userId ?? ""} />
 
 							{/* Info and expiry moved below actions to align with send error position */}
 

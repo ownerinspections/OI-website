@@ -4,19 +4,21 @@ import React from "react";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 
 // Server action to create invoice and approve proposal
-async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string) {
+async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string) {
 	try {
 		const response = await fetch('/api/proposals/approve-and-create-invoice', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ quoteId, dealId, contactId, propertyId, totalAmount, invoiceId: invoiceIdParam || null }),
+			body: JSON.stringify({ quoteId, dealId, contactId, propertyId, totalAmount, invoiceId: invoiceIdParam || null, userId: userId || null }),
 		});
 		
 		if (response.ok) {
 			const { invoiceId } = await response.json();
 			const params = new URLSearchParams();
-			if (dealId) params.set("dealId", dealId);
+			// Ensure userId is first in the invoice URL
+			if (userId) params.set("userId", userId);
 			if (contactId) params.set("contactId", contactId);
+			if (dealId) params.set("dealId", dealId);
 			if (propertyId) params.set("propertyId", propertyId);
 			params.set("quoteId", quoteId);
 			if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
@@ -25,8 +27,10 @@ async function createInvoiceAndNavigate(quoteId: string, dealId: string, contact
 		} else {
 			// Fallback to current behavior if API fails
 			const params = new URLSearchParams();
-			if (dealId) params.set("dealId", dealId);
+			// Ensure userId is first in the invoice URL
+			if (userId) params.set("userId", userId);
 			if (contactId) params.set("contactId", contactId);
+			if (dealId) params.set("dealId", dealId);
 			if (propertyId) params.set("propertyId", propertyId);
 			params.set("quoteId", quoteId);
 			if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
@@ -36,8 +40,10 @@ async function createInvoiceAndNavigate(quoteId: string, dealId: string, contact
 		console.error('Error creating invoice:', error);
 		// Fallback to current behavior if API fails
 		const params = new URLSearchParams();
-		if (dealId) params.set("dealId", dealId);
+		// Ensure userId is first in the invoice URL
+		if (userId) params.set("userId", userId);
 		if (contactId) params.set("contactId", contactId);
+		if (dealId) params.set("dealId", dealId);
 		if (propertyId) params.set("propertyId", propertyId);
 		params.set("quoteId", quoteId);
 		if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
@@ -70,9 +76,10 @@ type Props = {
 	termiteRisk?: string;
 	termiteRiskReason?: string;
     preselectedAddonIds?: number[];
+    userId?: string;
 };
 
-export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds }: Props) {
+export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId }: Props) {
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 };
 	const headerLeftSpacerStyle: React.CSSProperties = { flex: 1 };
@@ -158,11 +165,12 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 
 	const prevHref = (() => {
 		const params = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
-		if (dealId) params.set("dealId", String(dealId));
+		// Standard order: contactId, dealId, propertyId, quoteId
 		if (contactId) params.set("contactId", String(contactId));
+		if (dealId) params.set("dealId", String(dealId));
 		if (propertyId) params.set("propertyId", String(propertyId));
 		if (quote?.id) params.set("quoteId", String(quote.id));
+        if (userId) params.set("userId", String(userId));
 		const qs = params.toString();
 		return qs ? `/steps/02-property?${qs}` : "/steps/02-property";
 	})();
@@ -248,7 +256,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 				<PreviousButton href={prevHref} />
 				<button 
 					className="button-primary" 
-					onClick={() => createInvoiceAndNavigate(String(quote.id), dealId || "", contactId || "", propertyId || "", totalAmount, invoiceId || undefined)}
+					onClick={() => createInvoiceAndNavigate(String(quote.id), dealId || "", contactId || "", propertyId || "", totalAmount, invoiceId || undefined, userId || undefined)}
 				>
 					Accept Quote
 				</button>

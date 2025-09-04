@@ -9,6 +9,7 @@ import { getServiceById } from "@/lib/actions/services/getService";
 import { postRequest } from "@/lib/http/fetcher";
 import { getRequest } from "@/lib/http/fetcher";
 import { createProposal } from "@/lib/actions/quotes/createQuote";
+import { patchRequest } from "@/lib/http/fetcher";
 
 export type VerifyCodeResult = {
 	success?: boolean;
@@ -23,8 +24,9 @@ export async function submitVerifyCode(_prev: VerifyCodeResult, formData: FormDa
 	const contact_id = String(formData.get("contact_id") ?? "").trim();
 	const deal_id = String(formData.get("deal_id") ?? "").trim();
 	const property_id = String(formData.get("property_id") ?? "").trim();
+	const user_id = String(formData.get("user_id") ?? "").trim();
 
-	console.log("[submitVerifyCode] input", { phone, code_len: code.length, has_contact: !!contact_id, deal_id, property_id, sandbox: VERIFY_SANDBOX_ENABLED });
+	console.log("[submitVerifyCode] input", { phone, code_len: code.length, has_contact: !!contact_id, deal_id, property_id, user_id: user_id || undefined, sandbox: VERIFY_SANDBOX_ENABLED });
 	if (!phone || !/^\+61\d{9}$/.test(phone)) return { success: false, errors: { phone: "Phone is not valid" } };
 	if (!code || !/^\d{4,8}$/.test(code)) return { success: false, errors: { code: "Enter the code we sent you" } };
 
@@ -32,7 +34,7 @@ export async function submitVerifyCode(_prev: VerifyCodeResult, formData: FormDa
 	if (VERIFY_SANDBOX_ENABLED) {
 		if (code === VERIFY_SANDBOX_CODE) {
 			console.log("[submitVerifyCode] sandbox approved");
-			const result = await handlePostVerification({ contact_id, deal_id, property_id });
+			const result = await handlePostVerification({ contact_id, deal_id, property_id, user_id });
 			console.log("[submitVerifyCode] post verification result", result);
 			return result;
 		}
@@ -45,7 +47,7 @@ export async function submitVerifyCode(_prev: VerifyCodeResult, formData: FormDa
 		const res = await postFormRequest<{ status?: string; valid?: boolean }>(path, { To: phone, Code: code });
 		console.log("[submitVerifyCode] twilio response", res);
 		if (res && (res.valid === true || res.status === "approved")) {
-			const result = await handlePostVerification({ contact_id, deal_id, property_id });
+			const result = await handlePostVerification({ contact_id, deal_id, property_id, user_id });
 			console.log("[submitVerifyCode] post verification result", result);
 			return result;
 		}
@@ -56,13 +58,23 @@ export async function submitVerifyCode(_prev: VerifyCodeResult, formData: FormDa
 	}
 }
 
-type PostVerifyContext = { contact_id?: string; deal_id?: string; property_id?: string };
+type PostVerifyContext = { contact_id?: string; deal_id?: string; property_id?: string; user_id?: string };
 
-async function handlePostVerification({ contact_id, deal_id, property_id }: PostVerifyContext): Promise<VerifyCodeResult> {
+async function handlePostVerification({ contact_id, deal_id, property_id, user_id }: PostVerifyContext): Promise<VerifyCodeResult> {
 	try {
 		if (contact_id) {
 			console.log("[handlePostVerification] publishing contact", { contact_id });
 			await updateContact(contact_id, { status: "published" });
+		}
+
+		// Also activate the Directus user if present
+		if (user_id) {
+			try {
+				console.log("[handlePostVerification] activating user", { user_id });
+				await patchRequest(`/users/${encodeURIComponent(String(user_id))}`, { status: "active" });
+			} catch (uerr) {
+				console.warn("[handlePostVerification] failed to activate user", uerr);
+			}
 		}
 
 		// Ensure we have a deal id; if missing, try to resolve latest by contact
@@ -126,12 +138,14 @@ async function handlePostVerification({ contact_id, deal_id, property_id }: Post
 		// Always create proposal using the best available amount
 		let proposal: any = null;
 		try {
+			console.log("[handlePostVerification] creating proposal with", { deal_id: effectiveDealId, contact_id, property_id: effectivePropertyId, user_id });
 			proposal = await createProposal({
 				dealId: String(effectiveDealId),
 				contactId: contact_id,
 				propertyId: effectivePropertyId,
 				amount: (estimate?.quote_price ?? 0) as number,
 				note: (estimate?.note as string) || undefined,
+				userId: user_id,
 			});
 			console.log("[handlePostVerification] created proposal", { id: proposal?.id, amount: proposal?.quote_amount });
 		} catch (err) {

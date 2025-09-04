@@ -2,9 +2,13 @@ export const KONG_GATEWAY_URL = process.env.KONG_GATEWAY_URL ?? "http://localhos
 export const DEAL_OWNER_ID = process.env.DEAL_OWNER_ID ?? "";
 export const DEAL_STAGE_NEW_ID = process.env.DEAL_STAGE_NEW_ID ?? "";
 export const DEAL_STAGE_CLOSED_WON_ID = process.env.DEAL_STAGE_CLOSED_WON_ID ?? "";
+export const DEAL_STAGE_QUOTE_SUBMITTED_ID = process.env.DEAL_STAGE_QUOTE_SUBMITTED_ID ?? "";
+export const DEAL_STAGE_INVOICE_SUBMITTED_ID = process.env.DEAL_STAGE_INVOICE_SUBMITTED_ID ?? "";
+export const DEAL_STAGE_PAYMENT_SUBMITTED_ID = process.env.DEAL_STAGE_PAYMENT_SUBMITTED_ID ?? "";
+export const DEAL_STAGE_PAYMENT_FAILURE_ID = process.env.DEAL_STAGE_PAYMENT_FAILURE_ID ?? "";
 export const DEAL_NAME = process.env.DEAL_NAME ?? "Inspection Deal";
 // Default Directus role id for newly created users
-export const DIRECTUS_DEFAULT_ROLE_ID = process.env.DIRECTUS_DEFAULT_ROLE_ID ?? "";
+export const CLIENT_ROLE_ID = process.env.CLIENT_ROLE_ID ?? process.env.DIRECTUS_DEFAULT_ROLE_ID ?? "";
 // Kong route for Google Places Autocomplete; override if your gateway uses a different path
 export const GOOGLE_AUTOCOMPLETE_PATH = process.env.GOOGLE_AUTOCOMPLETE_PATH ?? "/maps/api/place/autocomplete/json";
 // OpenAI model (proxied via Kong)
@@ -36,3 +40,9 @@ export const FORM_COOKIE_DOMAIN = process.env.FORM_COOKIE_DOMAIN ?? "";
 // Redis (removed)
 // Dashboard app base URL (Next.js app). Used for redirects like "Book Now".
 export const APP_DASHBOARD_URL = process.env.APP_DASHBOARD_URL ?? "http://localhost:8040";
+
+// Payment failure reasons (static defaults)
+export const FAILED_REASON_REQUIRES_CONFIRMATION = process.env.FAILED_REASON_REQUIRES_CONFIRMATION ?? "Payment method attached, needs confirmation";
+export const FAILED_REASON_REQUIRES_ACTION = process.env.FAILED_REASON_REQUIRES_ACTION ?? "Customer must authenticate (3DS, OTP)";
+export const FAILED_REASON_PROCESSING = process.env.FAILED_REASON_PROCESSING ?? "Bank processing, waiting on result";
+export const FAILED_REASON_REQUIRES_CAPTURE = process.env.FAILED_REASON_REQUIRES_CAPTURE ?? "PaymentIntent canceled";

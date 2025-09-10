@@ -5,8 +5,8 @@ import { createInvoice, fetchGstRate, fetchCompanyInfo, fetchCustomerInfo, fetch
 import { updateInvoice } from "@/lib/actions/invoices/updateInvoice";
 import { redirect } from "next/navigation";
 import FormHeader from "@/components/ui/FormHeader";
+import { getInvoiceNote, getFormTermsLink, getFormPrivacyPolicyLink } from "@/lib/actions/globals/getGlobal";
 import FormFooter from "@/components/ui/FormFooter";
-import { getInvoiceNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
 
 export default async function StepInvoice({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -16,6 +16,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const userId = typeof params.userId === "string" ? params.userId : undefined;
+	const paymentId = typeof params.paymentId === "string" ? params.paymentId : undefined;
 
 	let proposal: any = null;
 	if (quoteId) {
@@ -140,7 +141,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	const propertyInfoResult = propertyInfo.status === 'fulfilled' ? propertyInfo.value : null;
 
 	// Prepare header details (same style as Quote step)
-	const invoiceNumber = (invoice as any)?.invoice_id || (invoice as any)?.invoice_number;
+	const invoiceNumber = (invoice as any)?.invoice_id;
 	const issueDateFmt = (() => {
 		try { return (invoice as any)?.issue_date ? new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date((invoice as any).issue_date)) : undefined; } catch { return undefined; }
 	})();
@@ -153,8 +154,11 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	async function payNowAction() {
 		"use server";
 		const currentInvoiceId = String((invoice as any).id);
-		// Derive a stable paymentId to append to Step 06 URL
+		// Use existing paymentId if available (from back navigation), otherwise derive a stable paymentId
 		const paymentIdLocal = (() => {
+			// If we have a paymentId from URL params (e.g., from back navigation), use it
+			if (paymentId) return String(paymentId);
+			// Otherwise, derive a stable paymentId
 			try {
 				const invPublicId = String((invoice as any)?.invoice_id || "").trim();
 				if (invPublicId) return invPublicId;
@@ -166,49 +170,132 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 		})();
 		// Will capture UUID from Directus os_payments creation response
 		let paymentIdFromCreation: string | undefined = undefined;
-		// Create a pending os_payment record immediately on click (non-blocking)
-		try {
-			const invRes = await getRequest<{ data: any }>(`/items/os_invoices/${encodeURIComponent(currentInvoiceId)}?fields=id,amount_due,total,subtotal,contact,invoice_id`);
-			const invData = (invRes as any)?.data ?? {};
-			const amountTotal = (() => {
-				const primary = invData?.amount_due;
-				if (typeof primary === "number") return primary;
-				if (typeof primary === "string") {
-					const parsed = parseFloat(primary);
-					if (Number.isFinite(parsed)) return parsed;
-				}
-				const fallback = invData?.total ?? invData?.subtotal ?? 0;
-				return typeof fallback === "number" ? fallback : (Number.isFinite(parseFloat(String(fallback))) ? parseFloat(String(fallback)) : 0);
-			})();
+		
+		// Check if we already have a payment record for this invoice
+		let existingPaymentId: string | undefined = undefined;
+		if (paymentId) {
+			// If paymentId is provided in URL, check if it exists and is valid
+			try {
+				const existingRes = await getRequest<{ data: any }>(`/items/os_payments/${encodeURIComponent(String(paymentId))}`);
+				if ((existingRes as any)?.data) {
+					existingPaymentId = String(paymentId);
+					// Update existing payment with current amount and status
+					const invRes = await getRequest<{ data: any }>(`/items/os_invoices/${encodeURIComponent(currentInvoiceId)}?fields=id,amount_due,total,subtotal,contact,invoice_id`);
+					const invData = (invRes as any)?.data ?? {};
+					const amountTotal = (() => {
+						const primary = invData?.amount_due;
+						if (typeof primary === "number") return primary;
+						if (typeof primary === "string") {
+							const parsed = parseFloat(primary);
+							if (Number.isFinite(parsed)) return parsed;
+						}
+						const fallback = invData?.total ?? invData?.subtotal ?? 0;
+						return typeof fallback === "number" ? fallback : (Number.isFinite(parseFloat(String(fallback))) ? parseFloat(String(fallback)) : 0);
+					})();
+					
+					// Build the payment page URL
+					const paymentPageParams = new URLSearchParams();
+					if (userId) paymentPageParams.set("userId", String(userId));
+					if (contactId) paymentPageParams.set("contactId", String(contactId));
+					if (dealId) paymentPageParams.set("dealId", String(dealId));
+					if (propertyId) paymentPageParams.set("propertyId", String(propertyId));
+					if (quoteId) paymentPageParams.set("quoteId", String(quoteId));
+					paymentPageParams.set("invoiceId", String(currentInvoiceId));
+					paymentPageParams.set("paymentId", String(paymentId));
+					const paymentPageUrl = `http://localhost:8030/steps/06-payment?${paymentPageParams.toString()}`;
 
-			const body: Record<string, unknown> = {
-				status: "submitted",
-				invoice: currentInvoiceId,
-				contact: (contactId || invData?.contact) ? String(contactId || invData.contact) : undefined,
-				amount: Number.isFinite(amountTotal) ? amountTotal : undefined,
-				...(userId ? { user: String(userId) } : {}),
-			};
-			try { console.log("[os_payments][step5] Creating submitted payment", body); } catch {}
-			const createdResp = await postRequest(`/items/os_payments`, body);
-			try { console.log("[os_payments][step5] Created response", createdResp); } catch {}
-			// After payment creation, change deal stage to PAYMENT_SUBMITTED if dealId available
-			try {
-				if (dealId && DEAL_STAGE_PAYMENT_SUBMITTED_ID) {
-					await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
-						deal_stage: DEAL_STAGE_PAYMENT_SUBMITTED_ID,
-					});
+					const updateBody: Record<string, unknown> = {
+						status: "submitted",
+						amount: Number.isFinite(amountTotal) ? amountTotal : undefined,
+						payment_link: paymentPageUrl,
+						...(userId ? { user: String(userId) } : {}),
+					};
+					try { console.log("[os_payments][step5] Updating existing payment from URL", { paymentId: existingPaymentId, updateBody }); } catch {}
+					await patchRequest(`/items/os_payments/${encodeURIComponent(String(paymentId))}`, updateBody);
+					try { console.log("[os_payments][step5] Updated existing payment", { paymentId: existingPaymentId }); } catch {}
 				}
-			} catch (err) {
-				try { console.warn('[step5] failed to update deal stage to PAYMENT_SUBMITTED', err); } catch {}
+			} catch {
+				// Payment doesn't exist, will create new one below
 			}
-			// Prefer the Directus os_payment UUID if available
+		}
+		
+		// Only create a new payment if we don't have an existing one
+		if (!existingPaymentId) {
 			try {
-				const createdId = (createdResp as any)?.data?.id ?? (createdResp as any)?.id;
-				if (createdId) {
-					paymentIdFromCreation = String(createdId);
+				const invRes = await getRequest<{ data: any }>(`/items/os_invoices/${encodeURIComponent(currentInvoiceId)}?fields=id,amount_due,total,subtotal,contact,invoice_id`);
+				const invData = (invRes as any)?.data ?? {};
+				const amountTotal = (() => {
+					const primary = invData?.amount_due;
+					if (typeof primary === "number") return primary;
+					if (typeof primary === "string") {
+						const parsed = parseFloat(primary);
+						if (Number.isFinite(parsed)) return parsed;
+					}
+					const fallback = invData?.total ?? invData?.subtotal ?? 0;
+					return typeof fallback === "number" ? fallback : (Number.isFinite(parseFloat(String(fallback))) ? parseFloat(String(fallback)) : 0);
+				})();
+
+				const body: Record<string, unknown> = {
+					status: "submitted",
+					invoice: currentInvoiceId,
+					contact: (contactId || invData?.contact) ? String(contactId || invData.contact) : undefined,
+					amount: Number.isFinite(amountTotal) ? amountTotal : undefined,
+					...(userId ? { user: String(userId) } : {}),
+				};
+				try { console.log("[os_payments][step5] Creating submitted payment", body); } catch {}
+				const createdResp = await postRequest(`/items/os_payments`, body);
+				try { console.log("[os_payments][step5] Created response", createdResp); } catch {}
+				
+				// Get the payment ID from creation response
+				let createdPaymentId: string | undefined = undefined;
+				try {
+					const createdId = (createdResp as any)?.data?.id ?? (createdResp as any)?.id;
+					if (createdId) {
+						createdPaymentId = String(createdId);
+						paymentIdFromCreation = createdPaymentId;
+					}
+				} catch {}
+				
+				// Update the payment record with payment_link using the payment ID we just created
+				if (createdPaymentId) {
+					try {
+						// Build the payment page URL
+						const paymentPageParams = new URLSearchParams();
+						if (userId) paymentPageParams.set("userId", String(userId));
+						if (contactId) paymentPageParams.set("contactId", String(contactId));
+						if (dealId) paymentPageParams.set("dealId", String(dealId));
+						if (propertyId) paymentPageParams.set("propertyId", String(propertyId));
+						if (quoteId) paymentPageParams.set("quoteId", String(quoteId));
+						paymentPageParams.set("invoiceId", String(currentInvoiceId));
+						paymentPageParams.set("paymentId", String(createdPaymentId));
+						const paymentPageUrl = `http://localhost:8030/steps/06-payment?${paymentPageParams.toString()}`;
+
+						// Update the payment record with payment_link
+						await patchRequest(`/items/os_payments/${encodeURIComponent(String(createdPaymentId))}`, {
+							payment_link: paymentPageUrl
+						});
+						try { console.log("[os_payments][step5] Updated payment with payment_link", { paymentId: createdPaymentId, payment_link: paymentPageUrl }); } catch {}
+					} catch (err) {
+						try { console.warn('[step5] failed to update payment with payment_link', err); } catch {}
+					}
+				}
+				
+				// After payment creation, change deal stage to PAYMENT_SUBMITTED if dealId available
+				try {
+					if (dealId && DEAL_STAGE_PAYMENT_SUBMITTED_ID) {
+						await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
+							deal_stage: DEAL_STAGE_PAYMENT_SUBMITTED_ID,
+						});
+					}
+				} catch (err) {
+					try { console.warn('[step5] failed to update deal stage to PAYMENT_SUBMITTED', err); } catch {}
 				}
 			} catch {}
-		} catch {}
+		} else {
+			// Use existing payment ID
+			paymentIdFromCreation = existingPaymentId;
+			try { console.log("[os_payments][step5] Using existing payment", { paymentId: existingPaymentId }); } catch {}
+		}
 
 		// Only change: set invoice status to approved
 		try { console.log("[invoice][pay-now] Setting invoice status to approved", { invoiceId: currentInvoiceId }); } catch {}
@@ -229,9 +316,10 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 		redirect(`/steps/06-payment?${sp.toString()}`);
 	}
 
-	const [invoiceNote, termsLink] = await Promise.all([
+	const [invoiceNote, termsLink, privacyPolicyLink] = await Promise.all([
 		getInvoiceNote(),
 		getFormTermsLink(),
+		getFormPrivacyPolicyLink(),
 	]);
 
 	return (
@@ -253,7 +341,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 				) : null}
 				<InvoicesForm invoice={{
 					id: String(invoice.id),
-					invoice_number: (invoice as any).invoice_id,
+					invoice_id: (invoice as any).invoice_id,
 					status: (invoice as any).status,
 					issue_date: (invoice as any).issue_date,
 					due_date: (invoice as any).due_date,
@@ -265,8 +353,19 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 					gst_rate: gstRateResult,
 					line_items: displayLineItems.length > 0 ? displayLineItems : ((invoice as any).line_items || []),
 					property: propertyInfoResult || undefined,
-				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} prevHref={`/steps/04-quote?contactId=${encodeURIComponent(String(contactId || ""))}&dealId=${encodeURIComponent(String(dealId || ""))}&propertyId=${encodeURIComponent(String(propertyId || ""))}&quoteId=${encodeURIComponent(String(quoteId || ""))}&invoiceId=${encodeURIComponent(String(invoiceId || ""))}${userId ? `&userId=${encodeURIComponent(String(userId))}` : ""}`} payNowAction={payNowAction} />
-				<FormFooter termsLink={termsLink} />
+				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} prevHref={(() => {
+					const prevParams = new URLSearchParams();
+					// Standard order: userId > contactId > dealId > propertyId > quoteId > invoiceId > paymentId
+					if (userId) prevParams.set("userId", String(userId));
+					if (contactId) prevParams.set("contactId", String(contactId));
+					if (dealId) prevParams.set("dealId", String(dealId));
+					if (propertyId) prevParams.set("propertyId", String(propertyId));
+					if (quoteId) prevParams.set("quoteId", String(quoteId));
+					if (invoiceId) prevParams.set("invoiceId", String(invoiceId));
+					// Include paymentId when going back to step 4
+					if (paymentId) prevParams.set("paymentId", String(paymentId));
+					return `/steps/04-quote?${prevParams.toString()}`;
+				})()} payNowAction={payNowAction} termsLink={termsLink} privacyPolicyLink={privacyPolicyLink} />
 			</div>
 		</div>
 	);

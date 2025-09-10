@@ -2,9 +2,11 @@
 
 import React from "react";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
+import AddonTooltip from "@/components/ui/AddonTooltip";
+import { fetchGstRate } from "@/lib/actions/invoices/createInvoice";
 
 // Server action to create invoice and approve proposal
-async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string) {
+async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string, paymentId?: string) {
 	try {
 		const response = await fetch('/api/proposals/approve-and-create-invoice', {
 			method: 'POST',
@@ -23,6 +25,8 @@ async function createInvoiceAndNavigate(quoteId: string, dealId: string, contact
 			params.set("quoteId", quoteId);
 			if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
 			else if (invoiceId) params.set("invoiceId", invoiceId);
+			// Include paymentId if it exists
+			if (paymentId) params.set("paymentId", paymentId);
 			window.location.href = `/steps/05-invoice?${params.toString()}`;
 		} else {
 			// Fallback to current behavior if API fails
@@ -34,6 +38,8 @@ async function createInvoiceAndNavigate(quoteId: string, dealId: string, contact
 			if (propertyId) params.set("propertyId", propertyId);
 			params.set("quoteId", quoteId);
 			if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
+			// Include paymentId if it exists
+			if (paymentId) params.set("paymentId", paymentId);
 			window.location.href = `/steps/05-invoice?${params.toString()}`;
 		}
 	} catch (error) {
@@ -47,6 +53,8 @@ async function createInvoiceAndNavigate(quoteId: string, dealId: string, contact
 		if (propertyId) params.set("propertyId", propertyId);
 		params.set("quoteId", quoteId);
 		if (invoiceIdParam) params.set("invoiceId", invoiceIdParam);
+		// Include paymentId if it exists
+		if (paymentId) params.set("paymentId", paymentId);
 		window.location.href = `/steps/05-invoice?${params.toString()}`;
 	}
 }
@@ -71,15 +79,17 @@ type Props = {
 	contactId?: string;
 	propertyId?: string;
 	invoiceId?: string;
+	paymentId?: string;
 	quoteNote?: string;
 	addons?: Array<{ id: number; name: string; price: number }>;
 	termiteRisk?: string;
 	termiteRiskReason?: string;
     preselectedAddonIds?: number[];
     userId?: string;
+    gstRate?: number;
 };
 
-export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId }: Props) {
+export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, paymentId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId, gstRate }: Props) {
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 };
 	const headerLeftSpacerStyle: React.CSSProperties = { flex: 1 };
@@ -137,13 +147,15 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 
 	const baseAmount = Number((quote as any)?.inspection_amount ?? (quote as any)?.quote_amount ?? quote?.amount ?? 0);
 	const addonsTotal = (addons || []).reduce((sum, a) => (selected[a.id] ? sum + Number(a.price || 0) : sum), 0);
-	const totalAmount = baseAmount + addonsTotal;
+	const subtotalExcludingGst = baseAmount + addonsTotal;
+	const gstAmount = +(subtotalExcludingGst * ((gstRate || 10) / 100)).toFixed(2);
+	const totalAmountIncludingGst = +(subtotalExcludingGst + gstAmount).toFixed(2);
 
 	// Debounce patch to server when total changes
 	React.useEffect(() => {
 		let alive = true;
 		const id = quote?.id;
-		const total = totalAmount;
+		const total = totalAmountIncludingGst; // Send total including GST to server
 		if (!id) return;
 		const timer = setTimeout(async () => {
 			if (!alive) return;
@@ -161,16 +173,18 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 			} catch {}
 		}, 300);
 		return () => { alive = false; clearTimeout(timer); };
-	}, [quote?.id, totalAmount, selected]);
+	}, [quote?.id, totalAmountIncludingGst, selected]);
 
 	const prevHref = (() => {
 		const params = new URLSearchParams();
-		// Standard order: contactId, dealId, propertyId, quoteId
+		// Standard order: userId, contactId, dealId, propertyId, invoiceId, quoteId, paymentId
+		if (userId) params.set("userId", String(userId));
 		if (contactId) params.set("contactId", String(contactId));
 		if (dealId) params.set("dealId", String(dealId));
 		if (propertyId) params.set("propertyId", String(propertyId));
+		if (invoiceId) params.set("invoiceId", String(invoiceId));
 		if (quote?.id) params.set("quoteId", String(quote.id));
-        if (userId) params.set("userId", String(userId));
+		if (paymentId) params.set("paymentId", String(paymentId));
 		const qs = params.toString();
 		return qs ? `/steps/02-property?${qs}` : "/steps/02-property";
 	})();
@@ -191,7 +205,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					<div style={inspectionBoxStyle}>
 						<span style={{ fontWeight: 600 }}>{quote.service_label || quote.service_code || "Inspection"}</span>
 						<span style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 16 }}>
-							{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD" }).format(baseAmount)}
+							{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(baseAmount)}
 						</span>
 					</div>
 					<div style={infoBoxStyle}>
@@ -230,9 +244,11 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 							<div key={a.id} style={addonRowStyle}>
 								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 									<Toggle checked={Boolean(selected[a.id])} onChange={(next) => setSelected((prev) => ({ ...prev, [a.id]: next }))} />
-									<span style={addonNameStyle}>{a.name}</span>
+									<AddonTooltip addonId={a.id}>
+										<span style={addonNameStyle}>{a.name}</span>
+									</AddonTooltip>
 								</div>
-								<span style={addonPriceStyle}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD" }).format(a.price || 0)}</span>
+								<span style={addonPriceStyle}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(a.price || 0)}</span>
 							</div>
 						))}
 					</div>
@@ -240,15 +256,19 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 			) : null}
 			<div style={rowStyle}>
 				<div style={labelStyle}>Quote amount</div>
-				<div style={{ ...valueStyle, color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD" }).format(baseAmount)}</div>
+				<div style={{ ...valueStyle, color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(baseAmount)}</div>
 			</div>
 			<div style={rowStyle}>
 				<div style={labelStyle}>Add-ons total</div>
-				<div style={{ ...valueStyle, color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD" }).format(addonsTotal)}</div>
+				<div style={{ ...valueStyle, color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(addonsTotal)}</div>
+			</div>
+			<div style={rowStyle}>
+				<div style={labelStyle}>GST ({gstRate || 10}%)</div>
+				<div style={{ ...valueStyle, color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(gstAmount)}</div>
 			</div>
 			<div style={{ ...rowStyle, borderTop: "1px solid #d9d9d9", paddingTop: 8 }}>
-				<div style={{ ...labelStyle, fontWeight: 600 }}>Total (excluding GST)</div>
-				<div style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 18 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD" }).format(totalAmount)}</div>
+				<div style={{ ...labelStyle, fontWeight: 600 }}>Total (Including GST)</div>
+				<div style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 18 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(totalAmountIncludingGst)}</div>
 			</div>
 
 
@@ -256,7 +276,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 				<PreviousButton href={prevHref} />
 				<button 
 					className="button-primary" 
-					onClick={() => createInvoiceAndNavigate(String(quote.id), dealId || "", contactId || "", propertyId || "", totalAmount, invoiceId || undefined, userId || undefined)}
+					onClick={() => createInvoiceAndNavigate(String(quote.id), dealId || "", contactId || "", propertyId || "", subtotalExcludingGst, invoiceId || undefined, userId || undefined, paymentId || undefined)}
 				>
 					Accept Quote
 				</button>

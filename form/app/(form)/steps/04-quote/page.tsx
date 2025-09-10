@@ -8,10 +8,10 @@ import { getProperty } from "@/lib/actions/properties/getProperty";
 import { createProposal } from "@/lib/actions/quotes/createQuote";
 import { postRequest } from "@/lib/http/fetcher";
 import { redirect } from "next/navigation";
-import { getQuoteNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
+import { getQuoteNote } from "@/lib/actions/globals/getGlobal";
 import { PROPOSAL_EXPIRY_DAYS } from "@/lib/env";
 import FormHeader from "@/components/ui/FormHeader";
-import FormFooter from "@/components/ui/FormFooter";
+import { fetchGstRate } from "@/lib/actions/invoices/createInvoice";
 
 export default async function StepQuote({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -21,6 +21,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 	const contactId = typeof params.contactId === "string" ? params.contactId : undefined;
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
+	const paymentId = typeof params.paymentId === "string" ? params.paymentId : undefined;
 
 	// Server-side trace for debugging user linkage
 	console.log("[StepQuote] Params parsed", { userId, quoteId, dealId, contactId, propertyId, invoiceId });
@@ -100,11 +101,11 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		console.log("[StepQuote] Proposal created", { id: (created as any)?.id, created });
 		// After creating the proposal (quote), redirect to include quoteId in URL
 		const paramsOut = new URLSearchParams();
-		// Standard order: contactId, dealId, propertyId, quoteId
+		// Standard order: userId, contactId, dealId, propertyId, quoteId
+		if (userId) paramsOut.set("userId", String(userId));
 		if (contactId) paramsOut.set("contactId", String(contactId));
 		if (dealId) paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
-		if (userId) paramsOut.set("userId", String(userId));
 		paramsOut.set("quoteId", String(created.id));
 		redirect(`/steps/04-quote?${paramsOut.toString()}`);
 	}
@@ -115,11 +116,11 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		const created = await createProposal({ dealId, contactId, propertyId, amount: 0, note: undefined, userId });
 		console.log("[StepQuote] Minimal proposal created", { id: (created as any)?.id, created });
 		const paramsOut = new URLSearchParams();
-		// Standard order: contactId, dealId, propertyId, quoteId
+		// Standard order: userId, contactId, dealId, propertyId, quoteId
+		if (userId) paramsOut.set("userId", String(userId));
 		if (contactId) paramsOut.set("contactId", String(contactId));
 		paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
-		if (userId) paramsOut.set("userId", String(userId));
 		paramsOut.set("quoteId", String(created.id));
 		redirect(`/steps/04-quote?${paramsOut.toString()}`);
 	}
@@ -202,9 +203,9 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			})()
 		: null;
 
-	const [quoteNote, termsLink] = await Promise.all([
+	const [quoteNote, gstRate] = await Promise.all([
 		getQuoteNote(),
-		getFormTermsLink(),
+		fetchGstRate(),
 	]);
 
 	// Prepare header details
@@ -233,8 +234,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						{ label: "Expiry Date", value: expiryDateFmt },
 					]}
 				/>
-				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} />
-				<FormFooter termsLink={termsLink} />
+				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} paymentId={paymentId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} gstRate={gstRate} />
 			</div>
 		</div>
 	);

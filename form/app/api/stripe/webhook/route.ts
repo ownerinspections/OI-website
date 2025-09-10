@@ -66,9 +66,10 @@ async function ensureOsPaymentFromPaymentIntent(event: Stripe.Event, stripe: Str
     }
     if (dealIdResolved) {
         try {
-            const dealRes = await getRequest<{ data: { property?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(dealIdResolved))}?fields=property`);
-            const p = (dealRes as any)?.data?.property;
-            if (p) propertyId = String(p);
+            const dealRes = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(dealIdResolved))}?fields=properties`);
+            const propsArr = (dealRes as any)?.data?.properties;
+            const p = Array.isArray(propsArr) && propsArr.length > 0 ? propsArr[0] : undefined;
+            if (p !== undefined && p !== null) propertyId = String(p);
         } catch {}
     }
 

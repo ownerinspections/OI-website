@@ -18,7 +18,7 @@ export default async function FormHeader({ rightTitle, rightSubtitle, rightMeta,
             <div className="form-header-left">
                 <div className="form-header-brand">
                     <div className="form-header-logo" style={logoWidth || logoHeight ? { width: logoWidth, height: logoHeight } : { width: 200, height: 56 }}>
-                        <Image src="/images/logo.png" alt="Company logo" fill sizes="200px" style={{ objectFit: "contain" }} />
+                        <Image src="/images/logo.png" alt="Company logo" fill sizes="200px" style={{ objectFit: "contain" }} priority />
                     </div>
                     <div className="form-header-company">
                         <div className="form-header-contacts">

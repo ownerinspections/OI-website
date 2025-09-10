@@ -2,10 +2,10 @@ import ContactsForm from "@/components/contacts/ContactsForm";
 import { listAllServices } from "@/lib/actions/services/getService";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { getContact } from "@/lib/actions/contacts/getContact";
+import { getUser } from "@/lib/actions/users/getUser";
 // import { getProperty } from "@/lib/actions/properties/getProperty";
 import FormHeader from "@/components/ui/FormHeader";
-import FormFooter from "@/components/ui/FormFooter";
-import { getContactNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
+import { getContactNote } from "@/lib/actions/globals/getGlobal";
 
 export default async function StepContact({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const services = await listAllServices();
@@ -14,6 +14,7 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 	const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
 	const contactIdParam = typeof params.contactId === "string" ? params.contactId : undefined;
 	const propertyIdParam = typeof params.propertyId === "string" ? params.propertyId : undefined;
+	const userIdParam = typeof params.userId === "string" ? params.userId : undefined;
 	// const categoryParam = typeof params.category === "string" ? (params.category as "residential" | "commercial") : undefined;
 
 	let deal: Awaited<ReturnType<typeof getDeal>> | null = null;
@@ -38,6 +39,15 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 		}
 	}
 
+	let user: any = null;
+	if (userIdParam) {
+		try {
+			user = await getUser(userIdParam);
+		} catch (_e) {
+			user = null;
+		}
+	}
+
 	// Step 1 no longer uses property/category to prefill
 	// let property: any = null;
 	// if (resolvedPropertyId) {
@@ -51,13 +61,12 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 	// const defaultCategory = categoryParam ?? propertyCategory;
 
 	const contactNote = await getContactNote();
-	const termsLink = await getFormTermsLink();
 
 	const initialValues = {
-		first_name: contact?.first_name ?? "",
-		last_name: contact?.last_name ?? "",
-		email: contact?.email ?? "",
-		phone: contact?.phone ?? "",
+		first_name: user?.first_name ?? contact?.first_name ?? "",
+		last_name: user?.last_name ?? contact?.last_name ?? "",
+		email: user?.email ?? contact?.email ?? "",
+		phone: user?.phone ?? contact?.phone ?? "",
 		service_id: deal?.service ? String(deal.service) : "",
 	} as const;
 
@@ -75,9 +84,9 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 					dealId={dealId}
 					contactId={resolvedContactId}
 					propertyId={resolvedPropertyId}
+					userId={userIdParam}
 					initialValues={initialValues}
 				/>
-				<FormFooter termsLink={termsLink} />
 			</div>
 		</div>
 	);

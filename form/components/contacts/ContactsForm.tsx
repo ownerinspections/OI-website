@@ -16,6 +16,7 @@ type Props = {
 	dealId?: string;
 	contactId?: string;
 	propertyId?: string;
+	userId?: string;
 	initialValues?: Partial<{
 		first_name: string;
 		last_name: string;
@@ -25,7 +26,7 @@ type Props = {
 	}>;
 };
 
-export default function ContactsForm({ services, dealId, contactId, propertyId, initialValues }: Props) {
+export default function ContactsForm({ services, dealId, contactId, propertyId, userId, initialValues }: Props) {
 	const initialState: ActionResult = {};
 	const [state, formAction] = useActionState<ActionResult, FormData>(submitContact, initialState);
 	const router = useRouter();
@@ -61,11 +62,14 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 		if (state?.success && state?.contactId && state?.dealId) {
 			const url = new URL(`/steps/02-property`, window.location.origin);
 			// Required order: userId, contactId, dealId, propertyId, quoteId
-			if (state?.userId) url.searchParams.set("userId", state.userId);
+			const currentUrl = new URL(window.location.href);
+			const currentUserId = currentUrl.searchParams.get("userId");
+			// Use userId from state if available, otherwise preserve from current URL
+			const userIdToUse = state?.userId || currentUserId;
+			if (userIdToUse) url.searchParams.set("userId", userIdToUse);
 			url.searchParams.set("contactId", state.contactId);
 			url.searchParams.set("dealId", String(state.dealId));
 			if (propertyId) url.searchParams.set("propertyId", propertyId);
-			const currentUrl = new URL(window.location.href);
 			const quoteId = currentUrl.searchParams.get("quoteId");
 			if (quoteId) url.searchParams.set("quoteId", quoteId);
 			router.replace(url.toString());
@@ -103,6 +107,7 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 					<input type="hidden" name="deal_id" value={dealId ?? ""} />
 					<input type="hidden" name="contact_id" value={contactId ?? ""} />
 					<input type="hidden" name="property_id" value={propertyId ?? ""} />
+					<input type="hidden" name="user_id" value={userId ?? ""} />
 					<div>
 						<TextField name="first_name" label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={state?.errors?.first_name} required autoComplete="given-name" />
 					</div>

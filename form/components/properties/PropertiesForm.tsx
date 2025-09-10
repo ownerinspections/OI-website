@@ -17,6 +17,8 @@ type Props = {
 	userId?: string;
 	dealId?: string;
 	quoteId?: string;
+	paymentId?: string;
+	invoiceId?: string;
 	serviceId?: number;
 	serviceName?: string | null;
 	propertyCategory?: "residential" | "commercial" | string;
@@ -26,7 +28,7 @@ type Props = {
 
 type ActionState = Awaited<ReturnType<typeof submitProperty>>;
 
-export default function PropertiesForm({ property, propertyId, contactId, userId, dealId, quoteId, serviceId, serviceName, propertyCategory, propertyNote, onExtract }: Props) {
+export default function PropertiesForm({ property, propertyId, contactId, userId, dealId, quoteId, paymentId, invoiceId, serviceId, serviceName, propertyCategory, propertyNote, onExtract }: Props) {
 	const initialState: ActionState = {} as any;
 	const [state, formAction] = useActionState<ActionState, FormData>(submitProperty, initialState);
 	const [submitted, setSubmitted] = useState<boolean>(false);
@@ -354,15 +356,18 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 
 	const prevHref = useMemo(() => {
 		const params = new URLSearchParams();
-		// Standard order: dealId, contactId, propertyId, quoteId
+		// Standard order: userId, dealId, contactId, propertyId, invoiceId, quoteId, paymentId
+		if (userId) params.set("userId", String(userId));
 		if (dealId) params.set("dealId", String(dealId));
 		if (contactId) params.set("contactId", String(contactId));
 		const effectivePropertyId = property?.id ?? propertyId;
 		if (effectivePropertyId) params.set("propertyId", String(effectivePropertyId));
+		if (invoiceId) params.set("invoiceId", String(invoiceId));
 		if (quoteId) params.set("quoteId", String(quoteId));
+		if (paymentId) params.set("paymentId", String(paymentId));
 		const qs = params.toString();
 		return qs ? `/steps/01-contact?${qs}` : "/steps/01-contact";
-	}, [dealId, contactId, property?.id, propertyId, quoteId]);
+	}, [userId, dealId, contactId, property?.id, propertyId, invoiceId, quoteId, paymentId]);
 
 	return (
 		<div style={cardStyle}>
@@ -620,7 +625,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							<div style={{ gridColumn: "1 / -1", background: "#f5f5f5", border: "1px solid var(--color-light-gray)", borderRadius: 6, padding: 12, margin: "8px 0" }}>
 								<div style={{ marginBottom: 6, color: "var(--color-text-secondary)" }}>
 									<strong>Client info</strong>
-									<div style={{ fontSize: 12, marginTop: 2 }}>Disclaimer: Information provided is for general purposes only and should not be relied on as professional advice.</div>
+									<div style={{ fontSize: 12, marginTop: 2 }}><span style={{ color: "#ef4444", fontWeight: "bold" }}>Disclaimer:</span> Information provided is for general purposes only and should not be relied on as professional advice.</div>
 								</div>
 								<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
 									<div><div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 2 }}>Floor area (sqm)</div><div>{String(clientInfo.floor_area_sqm ?? "N/A")}</div></div>

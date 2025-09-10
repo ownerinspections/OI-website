@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { CompanyInfo, CustomerInfo, PropertyInfo } from "@/lib/actions/invoices/createInvoice";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
+import FormFooter from "@/components/ui/FormFooter";
 
 type Props = {
 	invoice: {
 		id: string;
-		invoice_number: string;
+		invoice_id?: string;
 		status: string;
 		issue_date: string;
 		due_date: string;
@@ -31,10 +32,47 @@ type Props = {
 	nextHref?: string;
 	prevHref?: string;
 	payNowAction?: () => Promise<void>;
+	termsLink?: string;
+	privacyPolicyLink?: string;
 };
 
-export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextHref, prevHref, payNowAction }: Props) {
+// Utility function to format Australian phone numbers
+function formatAustralianPhone(phone: string): string {
+	if (!phone) return phone;
+	
+	// Remove all non-digit characters
+	const digits = phone.replace(/\D/g, '');
+	
+	// Handle different input formats
+	if (digits.startsWith('61')) {
+		// Already has country code
+		const withoutCountry = digits.substring(2);
+		if (withoutCountry.startsWith('4') && withoutCountry.length === 9) {
+			// Mobile number: 4XX XXX XXX
+			return `+61 ${withoutCountry.substring(0, 3)} ${withoutCountry.substring(3, 6)} ${withoutCountry.substring(6)}`;
+		}
+	} else if (digits.startsWith('0')) {
+		// Australian format with leading 0
+		const withoutZero = digits.substring(1);
+		if (withoutZero.startsWith('4') && withoutZero.length === 9) {
+			// Mobile number: 4XX XXX XXX
+			return `+61 ${withoutZero.substring(0, 3)} ${withoutZero.substring(3, 6)} ${withoutZero.substring(6)}`;
+		}
+	} else if (digits.startsWith('4') && digits.length === 9) {
+		// Just the mobile number without country code or leading 0
+		return `+61 ${digits.substring(0, 3)} ${digits.substring(3, 6)} ${digits.substring(6)}`;
+	}
+	
+	// If we can't format it properly, return the original
+	return phone;
+}
+
+export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextHref, prevHref, payNowAction, termsLink, privacyPolicyLink }: Props) {
 	const isPaid = (invoice.status || "").toLowerCase() === "paid";
+	const [termsAgreed, setTermsAgreed] = useState(false);
+	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	
+	console.log("InvoicesForm rendered with termsLink:", termsLink, "privacyPolicyLink:", privacyPolicyLink, "termsAgreed:", termsAgreed);
 	const headerStyle: React.CSSProperties = { 
 		display: "flex", 
 		justifyContent: "space-between", 
@@ -97,6 +135,26 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 		borderTop: "1px solid var(--color-light-gray)"
 	};
 
+	const handlePayNow = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setErrorMessage(null);
+		
+		console.log("Pay Now clicked, termsAgreed:", termsAgreed);
+		
+		// Check if terms are agreed to
+		if (!termsAgreed) {
+			console.log("Terms not agreed, showing error");
+			setErrorMessage("You must agree to the Terms and Conditions and Privacy Policy to proceed with payment.");
+			return;
+		}
+		
+		console.log("Terms agreed, proceeding with payment");
+		// If terms are agreed, proceed with the payment action
+		if (payNowAction) {
+			await payNowAction();
+		}
+	};
+
 	return (
 		<div>
 			{/* Header */}
@@ -116,11 +174,8 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 							<div style={{ fontWeight: 600 }}>
 								{customerInfo.company_name || `${customerInfo.first_name || ''} ${customerInfo.last_name || ''}`.trim() || 'Customer'}
 							</div>
-							{customerInfo.first_name && customerInfo.last_name && !customerInfo.company_name && (
-								<div>{customerInfo.first_name} {customerInfo.last_name}</div>
-							)}
 							{customerInfo.email && <div>{customerInfo.email}</div>}
-							{customerInfo.phone && <div>{customerInfo.phone}</div>}
+							{customerInfo.phone && <div>{formatAustralianPhone(customerInfo.phone)}</div>}
 							{customerInfo.address && <div>{customerInfo.address}</div>}
 						</div>
 					) : (
@@ -131,10 +186,18 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 					<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
 					{invoice.property ? (
 						<div style={{ lineHeight: 1.5 }}>
-							{invoice.property.street_address && <div style={{ fontWeight: 600 }}>{invoice.property.street_address}</div>}
-							{invoice.property.suburb && invoice.property.state && invoice.property.postcode && (
-								<div>{invoice.property.suburb}, {invoice.property.state} {invoice.property.postcode}</div>
-							)}
+							{/* Full Address */}
+							<div style={{ marginBottom: 8 }}>
+								{(() => {
+									const addressParts = [];
+									if (invoice.property.street_address) addressParts.push(invoice.property.street_address);
+									if (invoice.property.suburb) addressParts.push(invoice.property.suburb);
+									if (invoice.property.state) addressParts.push(invoice.property.state);
+									if (invoice.property.post_code) addressParts.push(invoice.property.post_code);
+									return addressParts.join(', ');
+								})()}
+							</div>
+							{/* Property Details */}
 							{invoice.property.property_type && <div>Type: {invoice.property.property_type}</div>}
 							{invoice.property.property_category && <div>Category: {invoice.property.property_category}</div>}
 							{invoice.property.number_of_bedrooms && <div>Bedrooms: {invoice.property.number_of_bedrooms}</div>}
@@ -168,10 +231,10 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 							</td>
 							<td style={{ ...tdStyle, textAlign: "center" }}>{item.quantity}</td>
 							<td style={{ ...tdStyle, textAlign: "right" }}>
-								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(item.unit_price)}
+								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.unit_price)}
 							</td>
 							<td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>
-								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(item.total)}
+								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.total)}
 							</td>
 						</tr>
 					))}
@@ -182,24 +245,56 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 			<div style={totalsStyle}>
 				<div style={totalRowStyle}>
 					<span style={{ color: "var(--color-text-secondary)" }}>Subtotal:</span>
-					<span style={{ fontWeight: 600 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(invoice.subtotal)}</span>
+					<span style={{ fontWeight: 600 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(invoice.subtotal)}</span>
 				</div>
 				<div style={totalRowStyle}>
 					<span style={{ color: "var(--color-text-secondary)" }}>GST ({invoice.gst_rate.toFixed(0)}%):</span>
-					<span style={{ fontWeight: 600 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(invoice.total_tax)}</span>
+					<span style={{ fontWeight: 600 }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(invoice.total_tax)}</span>
 				</div>
 				<div style={{ ...totalRowStyle, borderTop: "2px solid var(--color-primary)", paddingTop: 8, fontSize: 18, fontWeight: 700, color: "var(--color-primary)" }}>
 					<span>Total:</span>
-					<span>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(invoice.total)}</span>
+					<span>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(invoice.total)}</span>
 				</div>
 			</div>
+
+			{/* Terms and Conditions */}
+			{!isPaid && (termsLink || privacyPolicyLink) && (
+				<FormFooter 
+					termsLink={termsLink} 
+					privacyPolicyLink={privacyPolicyLink} 
+					onAgreementChange={(agreed) => {
+						console.log("Terms agreement changed to:", agreed);
+						setTermsAgreed(agreed);
+					}}
+				/>
+			)}
+
+			{/* Error Message */}
+			{errorMessage && (
+				<div style={{ 
+					color: "var(--color-error)", 
+					fontSize: 14, 
+					marginTop: 8,
+					padding: 8,
+					background: "#fef2f2",
+					border: "1px solid #fecaca",
+					borderRadius: 4
+				}}>
+					{errorMessage}
+				</div>
+			)}
 
 			{/* Actions */}
 			<div style={actionsStyle}>
 				{!isPaid && prevHref && <PreviousButton href={prevHref} />}
 				{!isPaid && (payNowAction ? (
-					<form action={payNowAction}>
-						<button type="submit" className="button-primary">Pay Now</button>
+					<form onSubmit={handlePayNow}>
+						<button 
+							type="submit" 
+							className="button-primary"
+						>
+							Pay Now
+						</button>
 					</form>
 				) : nextHref ? (
 					<a className="button-primary" href={nextHref}>Pay Now</a>

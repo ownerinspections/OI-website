@@ -1,11 +1,43 @@
 import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
+import { ensureBooking } from "@/lib/actions/bookings/createBooking";
 import { closeDealFromInvoice } from "@/lib/actions/deals/closeDealFromInvoice";
 import Stripe from "stripe";
 import { STRIPE_SECRET_KEY, APP_BASE_URL, DIRECTUS_APP_URL, APP_DASHBOARD_URL, DEAL_STAGE_PAYMENT_SUBMITTED_ID, DEAL_STAGE_PAYMENT_FAILURE_ID, FAILED_REASON_REQUIRES_CONFIRMATION, FAILED_REASON_REQUIRES_ACTION, FAILED_REASON_PROCESSING, FAILED_REASON_REQUIRES_CAPTURE } from "@/lib/env";
-import { fetchCompanyInfo, CustomerInfo, CompanyInfo } from "@/lib/actions/invoices/createInvoice";
+import { fetchCompanyInfo, fetchCustomerInfo, fetchPropertyInfo, CustomerInfo, CompanyInfo, PropertyInfo } from "@/lib/actions/invoices/createInvoice";
 import FormHeader from "@/components/ui/FormHeader";
 import { getReceiptNote } from "@/lib/actions/globals/getGlobal";
 import { redirect } from "next/navigation";
+
+// Utility function to format Australian phone numbers (same as step 5)
+function formatAustralianPhone(phone: string): string {
+	if (!phone) return phone;
+	
+	// Remove all non-digit characters
+	const digits = phone.replace(/\D/g, '');
+	
+	// Handle different input formats
+	if (digits.startsWith('61')) {
+		// Already has country code
+		const withoutCountry = digits.substring(2);
+		if (withoutCountry.startsWith('4') && withoutCountry.length === 9) {
+			// Mobile number: 4XX XXX XXX
+			return `+61 ${withoutCountry.substring(0, 3)} ${withoutCountry.substring(3, 6)} ${withoutCountry.substring(6)}`;
+		}
+	} else if (digits.startsWith('0')) {
+		// Australian format with leading 0
+		const withoutZero = digits.substring(1);
+		if (withoutZero.startsWith('4') && withoutZero.length === 9) {
+			// Mobile number: 4XX XXX XXX
+			return `+61 ${withoutZero.substring(0, 3)} ${withoutZero.substring(3, 6)} ${withoutZero.substring(6)}`;
+		}
+	} else if (digits.startsWith('4') && digits.length === 9) {
+		// Just the mobile number without country code or leading 0
+		return `+61 ${digits.substring(0, 3)} ${digits.substring(3, 6)} ${digits.substring(6)}`;
+	}
+	
+	// If we can't format it properly, return the original
+	return phone;
+}
 
 export default async function StepReceipt({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
     const params = (await searchParams) ?? {};
@@ -215,16 +247,17 @@ export default async function StepReceipt({ searchParams }: { searchParams?: Pro
         }
     } catch {}
 
-    // Optional: fetch contact for display
-    let customer: CustomerInfo | null = null;
-    if (invoice?.contact) {
-        try {
-            const contactRes = await getRequest<{ data: CustomerInfo }>(`/items/contacts/${encodeURIComponent(String(invoice.contact))}`);
-            customer = (contactRes as any)?.data ?? null;
-        } catch {}
-    }
+    // Fetch additional data for the receipt display (same pattern as step 5)
+    const [companyInfo, customerInfo, propertyInfo] = await Promise.allSettled([
+        fetchCompanyInfo(),
+        contactId ? fetchCustomerInfo(contactId) : (invoice?.contact ? fetchCustomerInfo(String(invoice.contact)) : null),
+        propertyId ? fetchPropertyInfo(propertyId) : null,
+    ]);
 
-    const company: CompanyInfo | null = await fetchCompanyInfo();
+    // Extract results from Promise.allSettled
+    const company = companyInfo.status === 'fulfilled' ? companyInfo.value : null;
+    const customer = customerInfo.status === 'fulfilled' ? customerInfo.value : null;
+    const property = propertyInfo.status === 'fulfilled' ? propertyInfo.value : null;
 
     // Prefer payment info from Directus os_payments
     let paidAmount: number | null = null;
@@ -413,7 +446,7 @@ export default async function StepReceipt({ searchParams }: { searchParams?: Pro
                     rightTitle="Receipt"
                     rightSubtitle={<><strong>Status:</strong> {isPaid ? "Paid" : "Failed"}</>}
                     rightMeta={[
-                        { label: "Invoice #", value: (invoice as any)?.invoice_id || (invoice as any)?.invoice_number },
+                        { label: "Invoice #", value: (invoice as any)?.invoice_id },
                         { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
                     ]}
                 />
@@ -424,30 +457,84 @@ export default async function StepReceipt({ searchParams }: { searchParams?: Pro
                 ) : null}
                 {/* Removed secondary details under the header per request */}
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-                    <div>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Billed To</div>
-                        <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
-                            {customer?.company_name || `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim() || "Customer"}
-                            {customer?.email && (<div>{customer.email}</div>)}
-                            {customer?.phone && (<div>{customer.phone}</div>)}
-                        </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Payment method</div>
-                        <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
-                            {paymentMethodSummary || (isPaid ? "Paid via Stripe" : "Payment failed")}
-                        </div>
-                        <div style={{ color: "var(--color-text-secondary)", fontSize: 14, marginTop: 2 }}>
-                            Transaction ID: {paymentRecord?.transaction_id || paymentRecord?.stripe_payment_id || paymentIntentId || "-"}
-                        </div>
-                        {paymentRecord?.receipt_url ? (
-                            <div style={{ color: "var(--color-text-secondary)", fontSize: 14, marginTop: 2 }}>
-                                Receipt: <a href={String(paymentRecord.receipt_url)} target="_blank" rel="noreferrer">View</a>
+                {/* Customer and Property Details (same style as step 5) */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 32 }}>
+                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Bill To:</h3>
+                        {customer ? (
+                            <div style={{ lineHeight: 1.5 }}>
+                                <div style={{ fontWeight: 600 }}>
+                                    {customer.company_name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer'}
+                                </div>
+                                {customer.email && <div>{customer.email}</div>}
+                                {customer.phone && <div>{formatAustralianPhone(customer.phone)}</div>}
+                                {customer.address && <div>{customer.address}</div>}
                             </div>
-                        ) : null}
+                        ) : (
+                            <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Customer information not available</div>
+                        )}
+                    </div>
+                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
+                        {property ? (
+                            <div style={{ lineHeight: 1.5 }}>
+                                {/* Full Address */}
+                                <div style={{ marginBottom: 8 }}>
+                                    {(() => {
+                                        const addressParts = [];
+                                        if (property.street_address) addressParts.push(property.street_address);
+                                        if (property.suburb) addressParts.push(property.suburb);
+                                        if (property.state) addressParts.push(property.state);
+                                        if (property.post_code) addressParts.push(property.post_code);
+                                        return addressParts.join(', ');
+                                    })()}
+                                </div>
+                                {/* Property Details */}
+                                {property.property_type && <div>Type: {property.property_type}</div>}
+                                {property.property_category && <div>Category: {property.property_category}</div>}
+                                {property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
+                                {property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
+                                {property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
+                                {property.basement && <div>Basement: Yes</div>}
+                                {property.termite_risk && <div>Termite Risk: {property.termite_risk}</div>}
+                            </div>
+                        ) : (
+                            <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
+                        )}
                     </div>
                 </div>
+
+                {/* Payment Information */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 32 }}>
+                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Transaction Details:</h3>
+                        <div style={{ lineHeight: 1.5 }}>
+                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Transaction ID</div>
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                                {paymentRecord?.transaction_id || paymentRecord?.stripe_payment_id || paymentIntentId || "-"}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Payment Method:</h3>
+                        <div style={{ lineHeight: 1.5 }}>
+                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Card Details</div>
+                            <div style={{ color: "var(--color-text-secondary)" }}>
+                                {paymentMethodSummary || (isPaid ? "Paid via Stripe" : "Payment failed")}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Receipt Section */}
+                {paymentRecord?.receipt_url && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <div style={{ fontWeight: 600 }}>Receipt</div>
+                        <div>
+                            <a href={String(paymentRecord.receipt_url)} target="_blank" rel="noreferrer" style={{ color: "var(--color-link)" }}>View Stripe Receipt</a>
+                        </div>
+                    </div>
+                )}
 
                 <div style={{ borderTop: "1px solid var(--color-light-gray)", paddingTop: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -457,12 +544,62 @@ export default async function StepReceipt({ searchParams }: { searchParams?: Pro
                     {/* Status row removed from totals */}
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-                    <a
-                        className="button-primary"
-                        href={`${(APP_DASHBOARD_URL || "http://localhost:8040").replace(/\/$/, "")}/login`}
-                    >
-                        Book Now
-                    </a>
+                    {/* Server Action button: create booking from invoice/property/contact/user and go to Step 08 */}
+                    <form action={async () => {
+                        "use server";
+                        if (!invoice?.id) return;
+                        // Resolve propertyId: prefer URL param; fallback via deal -> property
+                        let propertyIdEffective: string | undefined = propertyId ? String(propertyId) : undefined;
+                        if (!propertyIdEffective && dealId) {
+                            try {
+                                const dealRes = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=properties`);
+                                const propsArr = (dealRes as any)?.data?.properties;
+                                const p = Array.isArray(propsArr) && propsArr.length > 0 ? propsArr[0] : undefined;
+                                if (p !== undefined && p !== null) propertyIdEffective = String(p);
+                            } catch {}
+                        }
+                        if (!propertyIdEffective && invoice?.id) {
+                            try {
+                                // Try infer from invoice -> proposal -> deal -> property chain if available
+                                const invRes = await getRequest<{ data: { proposal?: (string | number)[] } }>(`/items/os_invoices/${encodeURIComponent(String(invoice.id))}?fields=proposal`);
+                                const propArr = (invRes as any)?.data?.proposal;
+                                const firstProposalId = Array.isArray(propArr) && propArr.length > 0 ? String(propArr[0]) : undefined;
+                                if (firstProposalId) {
+                                    const propRes = await getRequest<{ data: { deal?: string | number } }>(`/items/os_proposals/${encodeURIComponent(firstProposalId)}?fields=deal`);
+                                    const d = (propRes as any)?.data?.deal;
+                                    if (d) {
+                                        const dealRes2 = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(d))}?fields=properties`);
+                                        const propsArr2 = (dealRes2 as any)?.data?.properties;
+                                        const p2 = Array.isArray(propsArr2) && propsArr2.length > 0 ? propsArr2[0] : undefined;
+                                        if (p2 !== undefined && p2 !== null) propertyIdEffective = String(p2);
+                                    }
+                                }
+                            } catch {}
+                        }
+                        if (!propertyIdEffective) return;
+
+                        const booking = await ensureBooking({
+                            invoiceId: String(invoice.id),
+                            propertyId: propertyIdEffective,
+                            userId: userId ? String(userId) : undefined,
+                            contactId: (contactId || invoice?.contact) ? String(contactId || invoice?.contact) : undefined,
+                            dealId: dealId ? String(dealId) : undefined,
+                            quoteId: quoteId ? String(quoteId) : undefined,
+                        });
+
+                        const sp = new URLSearchParams();
+                        if (userId) sp.set("userId", String(userId));
+                        if (contactId) sp.set("contactId", String(contactId));
+                        if (dealId) sp.set("dealId", String(dealId));
+                        if (propertyIdEffective) sp.set("propertyId", String(propertyIdEffective));
+                        if (quoteId) sp.set("quoteId", String(quoteId));
+                        if (invoice?.id) sp.set("invoiceId", String(invoice.id));
+                        if (booking?.id) sp.set("bookingId", String(booking.id));
+
+                        redirect(`/steps/08-booking?${sp.toString()}`);
+                    }}>
+                        <button type="submit" className="button-primary">Book Now</button>
+                    </form>
                 </div>
             </div>
         </div>

@@ -3,8 +3,7 @@ import StripePaymentForm from "@/components/payments/StripePaymentForm";
 import { createPaymentIntent } from "@/lib/actions/payments/stripe/createPaymentIntent";
 import { APP_BASE_URL, STRIPE_PUBLISHABLE_KEY, DEAL_STAGE_PAYMENT_SUBMITTED_ID } from "@/lib/env";
 import FormHeader from "@/components/ui/FormHeader";
-import { getPaymentNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
-import FormFooter from "@/components/ui/FormFooter";
+import { getPaymentNote } from "@/lib/actions/globals/getGlobal";
 
 export default async function StepPayment({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -64,17 +63,59 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 		return Number.isFinite(baseNum) ? String(100000 + baseNum) : String(Math.floor(100000 + Math.random() * 900000));
 	})();
 
-	// Fallback: ensure a payment record exists for this invoice before creating PI
+	// Ensure a payment record exists for this invoice before creating PI
 	let directusPaymentId: string | undefined = undefined;
 	try {
-		// Skip if any payment already exists for this invoice (submitted/pending/etc.)
-		const existingRes = await getRequest<{ data: any[] }>(`/items/os_payments?filter[invoice][_eq]=${encodeURIComponent(String(invoiceId))}&limit=1&sort=-date_created`);
-		const hasAnyPayment = Array.isArray((existingRes as any)?.data) && (existingRes as any).data.length > 0;
-		if (hasAnyPayment) {
-			const latest = (existingRes as any).data[0];
-			if (latest?.id) directusPaymentId = String(latest.id);
+		// First, check if we have a specific paymentId from URL params
+		if (paymentIdParam) {
+			try {
+				const specificRes = await getRequest<{ data: any }>(`/items/os_payments/${encodeURIComponent(String(paymentIdParam))}`);
+				if ((specificRes as any)?.data) {
+					directusPaymentId = String(paymentIdParam);
+					const currentStatus = String((specificRes as any)?.data?.status || "");
+					// Only update to "submitted" if not already in a final state
+					if (currentStatus !== "success" && currentStatus !== "failure") {
+						const updateBody: Record<string, unknown> = {
+							status: "submitted",
+							amount: amountTotal,
+							...(userId ? { user: String(userId) } : {}),
+						};
+						try { console.log("[os_payments][step6] Updating existing payment from URL", { paymentId: directusPaymentId, updateBody }); } catch {}
+						await patchRequest(`/items/os_payments/${encodeURIComponent(String(paymentIdParam))}`, updateBody);
+						try { console.log("[os_payments][step6] Updated existing payment", { paymentId: directusPaymentId }); } catch {}
+					}
+				}
+			} catch {
+				// Specific payment doesn't exist, fall back to general check
+			}
 		}
-		if (!hasAnyPayment) {
+		
+		// If no specific payment found, check for any existing payment for this invoice
+		if (!directusPaymentId) {
+			const existingRes = await getRequest<{ data: any[] }>(`/items/os_payments?filter[invoice][_eq]=${encodeURIComponent(String(invoiceId))}&limit=1&sort=-date_created`);
+			const hasAnyPayment = Array.isArray((existingRes as any)?.data) && (existingRes as any).data.length > 0;
+			if (hasAnyPayment) {
+				const latest = (existingRes as any).data[0];
+				if (latest?.id) {
+					directusPaymentId = String(latest.id);
+					const currentStatus = String(latest?.status || "");
+					// Only update to "submitted" if not already in a final state
+					if (currentStatus !== "success" && currentStatus !== "failure") {
+						const updateBody: Record<string, unknown> = {
+							status: "submitted",
+							amount: amountTotal,
+							...(userId ? { user: String(userId) } : {}),
+						};
+						try { console.log("[os_payments][step6] Updating latest existing payment", { paymentId: directusPaymentId, updateBody }); } catch {}
+						await patchRequest(`/items/os_payments/${encodeURIComponent(String(latest.id))}`, updateBody);
+						try { console.log("[os_payments][step6] Updated latest existing payment", { paymentId: directusPaymentId }); } catch {}
+					}
+				}
+			}
+		}
+		
+		// Only create new payment if none exists
+		if (!directusPaymentId) {
 			const body: Record<string, unknown> = {
 				status: "submitted",
 				invoice: String(invoiceId),
@@ -82,17 +123,19 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 				amount: amountTotal,
 				...(userId ? { user: String(userId) } : {}),
 			};
-			try { console.log("[os_payments][step6] Creating submitted payment (fallback)", body); } catch {}
+			try { console.log("[os_payments][step6] Creating new payment", body); } catch {}
 			const createdResp = await postRequest<{ data: any }>(`/items/os_payments`, body);
 			try { console.log("[os_payments][step6] Created response", createdResp); } catch {}
 			try { directusPaymentId = String((createdResp as any)?.data?.id || ""); } catch {}
-			// After payment creation, change deal stage to PAYMENT_SUBMITTED if dealId available
+		}
+		
+		// Update deal stage to PAYMENT_SUBMITTED if dealId available (only once)
+		if (dealId && DEAL_STAGE_PAYMENT_SUBMITTED_ID) {
 			try {
-				if (dealId && DEAL_STAGE_PAYMENT_SUBMITTED_ID) {
-					await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
-						deal_stage: DEAL_STAGE_PAYMENT_SUBMITTED_ID,
-					});
-				}
+				await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, {
+					deal_stage: DEAL_STAGE_PAYMENT_SUBMITTED_ID,
+				});
+				try { console.log("[os_payments][step6] Updated deal stage to PAYMENT_SUBMITTED", { dealId }); } catch {}
 			} catch (err) {
 				try { console.warn('[step6] failed to update deal stage to PAYMENT_SUBMITTED', err); } catch {}
 			}
@@ -128,20 +171,43 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 
 	// Build Previous href back to Invoice step, preserving params
 	const prevParams = new URLSearchParams();
-	// Standard order: userId > contactId > dealId > propertyId > quoteId > invoiceId
+	// Standard order: userId > contactId > dealId > propertyId > quoteId > invoiceId > paymentId
 	if (userId) prevParams.set("userId", String(userId));
-	prevParams.set("invoiceId", String(invoiceId));
 	if (contactId) prevParams.set("contactId", String(contactId));
 	if (dealId) prevParams.set("dealId", String(dealId));
 	if (propertyId) prevParams.set("propertyId", String(propertyId));
 	if (quoteId) prevParams.set("quoteId", String(quoteId));
+	prevParams.set("invoiceId", String(invoiceId));
+	// Include paymentId when going back to step 5
+	prevParams.set("paymentId", String(paymentIdLocal));
 	const prevHref = `/steps/05-invoice?${prevParams.toString()}`;
 
-	const isPaid = String((invoice as any)?.status || "").toLowerCase() === "paid";
+	// Fetch payment status to determine if paid
+	let paymentStatus: string = "submitted"; // default to submitted
+	try {
+		if (directusPaymentId) {
+			const paymentRes = await getRequest<{ data: any }>(`/items/os_payments/${encodeURIComponent(String(directusPaymentId))}`);
+			paymentStatus = String((paymentRes as any)?.data?.status || "submitted");
+		}
+	} catch {}
+
+	const isPaid = String(paymentStatus || "").toLowerCase() === "success";
 	const statusLabel = isPaid ? "Paid" : "Unpaid";
-	const invoiceNumber = String((invoice as any)?.invoice_id || (invoice as any)?.invoice_number || invoiceId || "");
+	const invoiceNumber = String((invoice as any)?.invoice_id || invoiceId || "");
 
 	const paymentNote = await getPaymentNote();
+
+	// Debug: Log the rightMeta data to see what's being passed
+	console.log("[DEBUG] Payment amount data:", {
+		amountTotal,
+		formattedAmount: new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amountTotal),
+		invoiceNumber,
+		rightMeta: [
+			{ label: "Invoice #", value: invoiceNumber },
+			{ label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
+			{ label: "Amount", value: new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(amountTotal) },
+		]
+	});
 
 	return (
 		<div className="container">
@@ -160,7 +226,35 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 						<div>{paymentNote}</div>
 					</div>
 				) : null}
-				<StripePaymentForm clientSecret={clientSecret} invoiceId={String(invoiceId)} receiptHref={receiptHref} publishableKey={STRIPE_PUBLISHABLE_KEY} returnUrl={returnUrl} prevHref={prevHref} paymentId={directusPaymentId || ""} />
+				
+				{/* Payment Amount Display */}
+				<div style={{ background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 }}>
+					<div style={{ 
+						fontSize: "16px", 
+						fontWeight: "600", 
+						color: "var(--color-charcoal)"
+					}}>
+						Payment Amount: <span style={{ color: "var(--color-primary)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amountTotal)}</span>
+					</div>
+				</div>
+				
+				{isPaid ? (
+					/* Payment Already Completed */
+					<div style={{ 
+						background: "var(--color-success)", 
+						color: "white", 
+						borderRadius: 6, 
+						padding: 16, 
+						textAlign: "center",
+						fontSize: "16px",
+						fontWeight: "600"
+					}}>
+						Payment Completed Successfully
+					</div>
+				) : (
+					/* Payment Form */
+					<StripePaymentForm clientSecret={clientSecret} invoiceId={String(invoiceId)} receiptHref={receiptHref} publishableKey={STRIPE_PUBLISHABLE_KEY} returnUrl={returnUrl} prevHref={prevHref} paymentId={directusPaymentId || ""} />
+				)}
 			</div>
 		</div>
 	);

@@ -8,8 +8,7 @@ import { getServiceById } from "@/lib/actions/services/getService";
 import { getProperty } from "@/lib/actions/properties/getProperty";
 import { createProposal } from "@/lib/actions/quotes/createQuote";
 import FormHeader from "@/components/ui/FormHeader";
-import FormFooter from "@/components/ui/FormFooter";
-import { getPhoneVerificationNote, getFormTermsLink } from "@/lib/actions/globals/getGlobal";
+import { getPhoneVerificationNote } from "@/lib/actions/globals/getGlobal";
 import { getUser } from "@/lib/actions/users/getUser";
 
 export default async function StepPhoneVerification({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
@@ -116,22 +115,17 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
 		if (quoteId) paramsOut.set("quoteId", String(quoteId));
 		const to = `/steps/04-quote?${paramsOut.toString()}`;
-		const termsLink = await getFormTermsLink();
 		return (
 			<div className="container">
 				<div className="card">
 					<FormHeader rightTitle="Phone verification" rightSubtitle={<><strong>Status:</strong> Verified</>} />
 					<AlreadyVerified to={to} seconds={PHONE_VERIFIED_REDIRECT_SECONDS} />
-					<FormFooter termsLink={termsLink} />
 				</div>
 			</div>
 		);
 	}
 
-	const [phoneVerificationNote, termsLink] = await Promise.all([
-		getPhoneVerificationNote(),
-		getFormTermsLink(),
-	]);
+	const phoneVerificationNote = await getPhoneVerificationNote();
 
 	return (
 		<div className="container">
@@ -143,7 +137,6 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 					</div>
 				) : null}
 				<TwilioSMSForm phone={phone} contactId={contactId} dealId={dealId} propertyId={propertyId} redirectSeconds={PHONE_VERIFIED_REDIRECT_SECONDS} quoteId={quoteIdParam} userId={userIdParam} />
-				<FormFooter termsLink={termsLink} />
 			</div>
 		</div>
 	);

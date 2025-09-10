@@ -54,7 +54,7 @@ export type PropertyInfo = {
 	street_address?: string;
 	suburb?: string;
 	state?: string;
-	postcode?: string;
+	post_code?: string;
 	property_type?: string;
 	number_of_bedrooms?: number;
 	number_of_bathrooms?: number;
@@ -190,9 +190,10 @@ export async function createInvoice(input: {
 			let propertyId: string | undefined = undefined;
 			try {
 				if (dealId) {
-					const dealRes = await getRequest<{ data: { property?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=property`);
-					const p = (dealRes as any)?.data?.property;
-					if (p) propertyId = String(p);
+					const dealRes = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=properties`);
+					const propsArr = (dealRes as any)?.data?.properties;
+					const p = Array.isArray(propsArr) && propsArr.length > 0 ? propsArr[0] : undefined;
+					if (p !== undefined && p !== null) propertyId = String(p);
 				}
 			} catch {}
 			const queryParts: string[] = [];

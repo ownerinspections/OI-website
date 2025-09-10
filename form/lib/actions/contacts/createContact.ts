@@ -8,6 +8,7 @@ import { getServiceById } from "@/lib/actions/services/getService";
 import { updateContact } from "@/lib/actions/contacts/updateContact";
 import { updateDeal } from "@/lib/actions/deals/updateDeal";
 import { createOrUpdateUserForContact } from "@/lib/actions/users/createUser";
+import { updateUser } from "@/lib/actions/users/updateUser";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { cookies, headers } from "next/headers";
 
@@ -40,7 +41,7 @@ function validate(input: ContactInput): Record<string, string> {
 	if (!input.first_name?.trim()) errors.first_name = "First name is required";
 	if (!input.last_name?.trim()) errors.last_name = "Last name is required";
 	if (!input.email?.trim()) errors.email = "Email is required";
-	else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.email = "Enter a valid email";
+	else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(input.email)) errors.email = "Enter a valid email";
 	return errors;
 }
 
@@ -57,14 +58,18 @@ type ContactRecord = {
 };
 
 export async function createContact(data: ContactInput): Promise<ActionResult> {
+	console.log("📞 [CREATE CONTACT] Starting contact creation with data:", data);
+	
 	const errors = validate(data);
 	if (Object.keys(errors).length > 0) {
+		console.log("❌ [CREATE CONTACT] Validation errors:", errors);
 		return { success: false, errors, form: { ...data } };
 	}
 
 	try {
 		// 1) Check if contact exists by email
 		const encodedEmail = encodeURIComponent(data.email);
+		console.log("📞 [CREATE CONTACT] Checking for existing contact with email:", data.email);
 		const list = await getRequest<DirectusListResponse<ContactRecord>>(
 			`/items/contacts?filter%5Bemail%5D%5B_eq%5D=${encodedEmail}`
 		);
@@ -74,6 +79,7 @@ export async function createContact(data: ContactInput): Promise<ActionResult> {
 		if (Array.isArray(list?.data) && list.data.length > 0) {
 			// 2) Update existing (first_name, last_name, phone) — do not update email
 			contactId = list.data[0].id;
+			console.log("📞 [CREATE CONTACT] Found existing contact, updating:", contactId);
 			await patchRequest<DirectusItemResponse<ContactRecord>>(
 				`/items/contacts/${contactId}`,
 				{
@@ -82,10 +88,11 @@ export async function createContact(data: ContactInput): Promise<ActionResult> {
 					phone: data.phone,
 				}
 			);
+			console.log("✅ [CREATE CONTACT] Successfully updated existing contact");
 		} else {
 			// 3) Create new
+			console.log("📞 [CREATE CONTACT] Creating new contact with email:", data.email);
 			try {
-				try { console.log("[contact][create] Creating new contact", { email: data.email }); } catch {}
 				const created = await postRequest<DirectusItemResponse<ContactRecord>>(
 					"/items/contacts",
 					{
@@ -97,21 +104,23 @@ export async function createContact(data: ContactInput): Promise<ActionResult> {
 					}
 				);
 				contactId = created?.data?.id ?? null;
-				try { console.log("[contact][create] Created contact", { contactId }); } catch {}
+				console.log("✅ [CREATE CONTACT] Successfully created new contact with ID:", contactId);
 			} catch (e) {
-				try { console.error("[contact][create] Failed", { email: data.email, error: String(e) }); } catch {}
+				console.error("❌ [CREATE CONTACT] Failed to create contact:", e);
 				throw e;
 			}
 		}
 
 		if (!contactId) {
+			console.log("❌ [CREATE CONTACT] No contact ID returned");
 			return { success: false, message: "Failed to get contact id" };
 		}
 
 		// 4) Return success with contactId
+		console.log("✅ [CREATE CONTACT] Returning success with contactId:", contactId);
 		return { success: true, contactId };
 	} catch (_err) {
-		try { console.error("[contact] Failed to save contact", { email: data.email, error: String(_err) }); } catch {}
+		console.error("❌ [CREATE CONTACT] Failed to save contact:", _err);
 		return { success: false, message: "Failed to save contact", form: { ...data } };
 	}
 }
@@ -132,6 +141,7 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 	const deal_id_raw = String(formData.get("deal_id") ?? "");
 	const contact_id_raw = String(formData.get("contact_id") ?? "").trim();
 	const property_id_raw = String(formData.get("property_id") ?? "").trim();
+	const user_id_raw = String(formData.get("user_id") ?? "").trim();
 
 	const allIdsPresent = Boolean(deal_id_raw && contact_id_raw && property_id_raw);
 
@@ -140,6 +150,7 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 		contact_id_raw,
 		property_id_raw,
 		service_id_raw,
+		user_id_raw,
 		allIdsPresent,
 	};
 	console.log("[submitContact] parsed inputs", parsedInputs);
@@ -152,6 +163,26 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 			errors: { ...errors, service_id: "Service is required" },
 			form: { ...payload, service_id: "" },
 		};
+	}
+
+	// Update user if userId exists in URL
+	if (user_id_raw) {
+		console.log("[submitContact] updating existing user", { user_id_raw });
+		debug.push({ tag: "update_user", user_id_raw, payload: { ...payload } });
+		try {
+			await updateUser(user_id_raw, {
+				first_name: payload.first_name,
+				last_name: payload.last_name,
+				email: payload.email,
+				phone: payload.phone,
+			});
+			console.log("[submitContact] user updated");
+			debug.push({ tag: "update_user_success", user_id_raw });
+		} catch (_e) {
+			console.error("[submitContact] failed to update user", _e);
+			debug.push({ tag: "update_user_error", error: String(_e) });
+			// Continue with contact processing even if user update fails
+		}
 	}
 
 	// Resolve or create contact
@@ -191,35 +222,38 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 		debug.push({ tag: "create_contact", contactId: resolvedContactId });
 	}
 
-	// Ensure a Directus user exists for the contact (no login in step 1)
-	let access_token: string | undefined = undefined;
-	let refresh_token: string | undefined = undefined;
-	let expires: number | undefined = undefined;
-	let expires_at: number | undefined = undefined;
-	let userIdForDeal: string | undefined = undefined;
-	try {
-		const passwordFromPhone = payload.phone.replace(/^\+/, "");
-		const userRes = await createOrUpdateUserForContact({
-			first_name: payload.first_name,
-			last_name: payload.last_name,
-			email: payload.email,
-			password: passwordFromPhone,
-			phone: payload.phone,
-			contact_id: resolvedContactId || undefined,
-		});
-		userIdForDeal = userRes.userId;
-		debug.push({ tag: "user_sync", success: userRes.success, userId: userRes.userId });
-		// Link contact to user similar to how deal links to user
-		if (userIdForDeal && resolvedContactId) {
-			try {
-				await updateContact(resolvedContactId, { user: userIdForDeal } as any);
-				debug.push({ tag: "contact_link_user", contactId: resolvedContactId, userId: userIdForDeal });
-			} catch (linkErr) {
-				debug.push({ tag: "contact_link_user_error", error: String(linkErr) });
-			}
+	// Use existing userId if provided, otherwise ensure a Directus user exists for the contact
+	let userIdForDeal: string | undefined = user_id_raw || undefined;
+	
+	if (!user_id_raw) {
+		// Only create/update user if no userId was provided in URL
+		try {
+			const passwordFromPhone = payload.phone.replace(/^\+/, "");
+			const userRes = await createOrUpdateUserForContact({
+				first_name: payload.first_name,
+				last_name: payload.last_name,
+				email: payload.email,
+				password: passwordFromPhone,
+				phone: payload.phone,
+				contact_id: resolvedContactId || undefined,
+			});
+			userIdForDeal = userRes.userId;
+			debug.push({ tag: "user_sync", success: userRes.success, userId: userRes.userId });
+		} catch (_e) {
+			debug.push({ tag: "user_sync_error", error: String(_e) });
 		}
-	} catch (_e) {
-		debug.push({ tag: "user_sync_error", error: String(_e) });
+	} else {
+		debug.push({ tag: "user_existing", userId: user_id_raw });
+	}
+	
+	// Link contact to user similar to how deal links to user
+	if (userIdForDeal && resolvedContactId) {
+		try {
+			await updateContact(resolvedContactId, { user: userIdForDeal } as any);
+			debug.push({ tag: "contact_link_user", contactId: resolvedContactId, userId: userIdForDeal });
+		} catch (linkErr) {
+			debug.push({ tag: "contact_link_user_error", error: String(linkErr) });
+		}
 	}
 
 	// Step 1: do not create or update property

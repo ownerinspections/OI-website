@@ -14,6 +14,8 @@ export type DealUpdateInput = Partial<{
 	property?: string;
 	addons?: number[];
 	user?: string;
+	deal_value?: number;
+	close_date?: string;
 }>;
 
 export type DealRecord = {

@@ -62,11 +62,32 @@ export async function getReceiptNote(): Promise<string> {
 	return String(res?.data?.receipt_note ?? "");
 }
 
+// Fetches only the booking_note field
+type BookingNoteResponse = { data?: { booking_note?: string } };
+export async function getBookingNote(): Promise<string> {
+	const res = await getRequest<BookingNoteResponse>(`/items/globals?fields=booking_note`);
+	return String(res?.data?.booking_note ?? "");
+}
+
+// Fetches only the thank_you_note field
+type ThankYouNoteResponse = { data?: { thank_you_note?: string } };
+export async function getThankYouNote(): Promise<string> {
+	const res = await getRequest<ThankYouNoteResponse>(`/items/globals?fields=thank_you_note`);
+	return String(res?.data?.thank_you_note ?? "");
+}
+
 
 // Fetches only the form_terms_and_conditions_link field
 type TermsLinkResponse = { data?: { form_terms_and_conditions_link?: string } };
 export async function getFormTermsLink(): Promise<string> {
 	const res = await getRequest<TermsLinkResponse>(`/items/globals?fields=form_terms_and_conditions_link`);
 	return String(res?.data?.form_terms_and_conditions_link ?? "");
+}
+
+// Fetches only the form_privacy_and_policy_link field
+type PrivacyPolicyLinkResponse = { data?: { form_privacy_and_policy_link?: string } };
+export async function getFormPrivacyPolicyLink(): Promise<string> {
+	const res = await getRequest<PrivacyPolicyLinkResponse>(`/items/globals?fields=form_privacy_and_policy_link`);
+	return String(res?.data?.form_privacy_and_policy_link ?? "");
 }
 

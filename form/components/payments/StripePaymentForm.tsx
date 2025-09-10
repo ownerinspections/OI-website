@@ -35,6 +35,8 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref, invoiceId,
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMessage(null);
+        
+        
         if (!stripe || !elements) return;
         setSubmitting(true);
         try {

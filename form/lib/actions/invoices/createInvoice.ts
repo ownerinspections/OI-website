@@ -120,6 +120,33 @@ export async function fetchPropertyInfo(propertyId: string): Promise<PropertyInf
 	}
 }
 
+export async function fetchMultiplePropertiesInfo(propertyIds: string): Promise<PropertyInfo[]> {
+	try {
+		// Handle comma-separated property IDs
+		const ids = propertyIds.split(',').map(id => id.trim()).filter(Boolean);
+		if (ids.length === 0) return [];
+		
+		// If only one ID, use the existing function
+		if (ids.length === 1) {
+			const property = await fetchPropertyInfo(ids[0]);
+			return property ? [property] : [];
+		}
+		
+		// For multiple IDs, fetch them all in parallel
+		const promises = ids.map(id => fetchPropertyInfo(id));
+		const results = await Promise.allSettled(promises);
+		
+		return results
+			.filter((result): result is PromiseFulfilledResult<PropertyInfo | null> => 
+				result.status === 'fulfilled' && result.value !== null
+			)
+			.map(result => result.value as PropertyInfo);
+	} catch (error) {
+		console.error('Error fetching multiple properties info:', error);
+		return [];
+	}
+}
+
 export async function createInvoice(input: {
 	contactId: string;
 	proposalId: string;

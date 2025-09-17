@@ -42,6 +42,23 @@ function validate(input: ContactInput): Record<string, string> {
 	if (!input.last_name?.trim()) errors.last_name = "Last name is required";
 	if (!input.email?.trim()) errors.email = "Email is required";
 	else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(input.email)) errors.email = "Enter a valid email";
+	if (!input.phone?.trim()) {
+		errors.phone = "Phone is required";
+	} else {
+		// Check if it's in E.164 format (+61...)
+		if (input.phone.startsWith("+61")) {
+			const phoneDigits = input.phone.replace(/\D+/g, "");
+			if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) {
+				errors.phone = "Enter a valid Australian mobile number";
+			}
+		} else {
+			// Check if it's in local format (4xx xxx xxx or partial)
+			const phoneDigits = input.phone.replace(/\D+/g, "");
+			if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) {
+				errors.phone = "Enter a valid Australian mobile number";
+			}
+		}
+	}
 	return errors;
 }
 
@@ -165,62 +182,81 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 		};
 	}
 
-	// Update user if userId exists in URL
-	if (user_id_raw) {
-		console.log("[submitContact] updating existing user", { user_id_raw });
-		debug.push({ tag: "update_user", user_id_raw, payload: { ...payload } });
-		try {
-			await updateUser(user_id_raw, {
-				first_name: payload.first_name,
-				last_name: payload.last_name,
-				email: payload.email,
-				phone: payload.phone,
-			});
-			console.log("[submitContact] user updated");
-			debug.push({ tag: "update_user_success", user_id_raw });
-		} catch (_e) {
-			console.error("[submitContact] failed to update user", _e);
-			debug.push({ tag: "update_user_error", error: String(_e) });
-			// Continue with contact processing even if user update fails
+	// Define types for parallel operation results
+	type UserUpdateResult = { success: true } | { success: false; error: unknown };
+	type ContactResult = 
+		| { success: true; contactId: string }
+		| { success: false; error: unknown; critical?: boolean };
+
+	// Batch 1: Run user update and contact resolution in parallel (independent operations)
+	const [userUpdateResult, contactResult] = await Promise.all([
+		// User update operation
+		user_id_raw ? (async (): Promise<UserUpdateResult> => {
+			console.log("[submitContact] updating existing user", { user_id_raw });
+			debug.push({ tag: "update_user", user_id_raw, payload: { ...payload } });
+			try {
+				await updateUser(user_id_raw, {
+					first_name: payload.first_name,
+					last_name: payload.last_name,
+					email: payload.email,
+					phone: payload.phone,
+				});
+				console.log("[submitContact] user updated");
+				debug.push({ tag: "update_user_success", user_id_raw });
+				return { success: true } as const;
+			} catch (_e) {
+				console.error("[submitContact] failed to update user", _e);
+				debug.push({ tag: "update_user_error", error: String(_e) });
+				return { success: false, error: _e } as const;
+			}
+		})() : Promise.resolve({ success: true } as const),
+
+		// Contact resolution operation
+		contact_id_raw ? (async (): Promise<ContactResult> => {
+			console.log("[submitContact] updating existing contact", { contact_id_raw });
+			debug.push({ tag: "update_contact", contact_id_raw, payload: { ...payload } });
+			try {
+				await updateContact(contact_id_raw, {
+					first_name: payload.first_name,
+					last_name: payload.last_name,
+					phone: payload.phone,
+				});
+				console.log("[submitContact] contact updated");
+				debug.push({ tag: "update_contact_success", contact_id_raw });
+				return { success: true, contactId: contact_id_raw };
+			} catch (_e) {
+				if (allIdsPresent) {
+					return { success: false, error: _e, critical: true };
+				}
+				console.log("[submitContact] creating new contact due to update failure or no id");
+				const res = await createContact(payload);
+				if (!res.success || !res.contactId) return { success: false, error: res };
+				debug.push({ tag: "create_contact", contactId: res.contactId });
+				return { success: true, contactId: res.contactId };
+			}
+		})() : (async (): Promise<ContactResult> => {
+			console.log("[submitContact] creating new contact (no contact_id in payload)");
+			const res = await createContact(payload);
+			if (!res.success || !res.contactId) return { success: false, error: res };
+			debug.push({ tag: "create_contact", contactId: res.contactId });
+			return { success: true, contactId: res.contactId };
+		})(),
+	]);
+
+	// Handle contact result
+	if (!contactResult.success) {
+		if (contactResult.critical) {
+			return {
+				success: false,
+				message: "Failed to update existing contact",
+				debug,
+				form: { ...payload, service_id: service_id_raw },
+			};
 		}
+		return contactResult.error as ActionResult;
 	}
 
-	// Resolve or create contact
-	let resolvedContactId: string | null = null;
-	if (contact_id_raw) {
-		console.log("[submitContact] updating existing contact", { contact_id_raw });
-		debug.push({ tag: "update_contact", contact_id_raw, payload: { ...payload } });
-		try {
-			await updateContact(contact_id_raw, {
-				first_name: payload.first_name,
-				last_name: payload.last_name,
-				phone: payload.phone,
-			});
-			resolvedContactId = contact_id_raw;
-			console.log("[submitContact] contact updated");
-			debug.push({ tag: "update_contact_success", contact_id_raw });
-		} catch (_e) {
-			if (allIdsPresent) {
-				return {
-					success: false,
-					message: "Failed to update existing contact",
-					debug,
-					form: { ...payload, service_id: service_id_raw },
-				};
-			}
-			console.log("[submitContact] creating new contact due to update failure or no id");
-			const res = await createContact(payload);
-			if (!res.success || !res.contactId) return res;
-			resolvedContactId = res.contactId;
-			debug.push({ tag: "create_contact", contactId: resolvedContactId });
-		}
-	} else {
-		console.log("[submitContact] creating new contact (no contact_id in payload)");
-		const res = await createContact(payload);
-		if (!res.success || !res.contactId) return res;
-		resolvedContactId = res.contactId;
-		debug.push({ tag: "create_contact", contactId: resolvedContactId });
-	}
+	const resolvedContactId = contactResult.contactId;
 
 	// Use existing userId if provided, otherwise ensure a Directus user exists for the contact
 	let userIdForDeal: string | undefined = user_id_raw || undefined;

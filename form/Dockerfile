@@ -1,4 +1,3 @@
-# Use the official Node.js 18 image as base
 FROM node:18-alpine AS base
 
 # Install dependencies only when needed
@@ -8,8 +7,12 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
-COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN \
+  if [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -22,7 +25,11 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN npm run build
+RUN \
+  if [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
+  elif [ -f package-lock.json ]; then npm run build; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -51,6 +58,7 @@ USER nextjs
 EXPOSE 8030
 
 ENV PORT 8030
+# set hostname to localhost
 ENV HOSTNAME "0.0.0.0"
 
 # server.js is created by next build from the standalone output

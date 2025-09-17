@@ -10,6 +10,9 @@ import { createProposal } from "@/lib/actions/quotes/createQuote";
 import FormHeader from "@/components/ui/FormHeader";
 import { getPhoneVerificationNote } from "@/lib/actions/globals/getGlobal";
 import { getUser } from "@/lib/actions/users/getUser";
+import NoteBox from "@/components/ui/messages/NoteBox";
+import { redirect } from "next/navigation";
+import { getStepUrl, getRouteTypeFromServiceType } from "@/lib/config/service-routing";
 
 export default async function StepPhoneVerification({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -18,6 +21,10 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 	const propertyIdParam = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const userIdParam = typeof params.userId === "string" ? params.userId : undefined;
 	const quoteIdParam = typeof params.quoteId === "string" ? params.quoteId : undefined;
+
+	if (!dealId || !contactIdParam || !propertyIdParam || !userIdParam) {
+		redirect('/not-found');
+	}
 
 	let phone: string | undefined = undefined;
 	let status: string | undefined = undefined;
@@ -107,6 +114,23 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 			}
 		}
 
+		// Determine the service-specific quote page to redirect to
+		let quoteUrl = "/steps/04-quote"; // fallback to generic quote page
+		try {
+			const deal = await getDeal(dealId);
+			if (deal?.service) {
+				const service = await getServiceById(deal.service);
+				if (service?.service_type) {
+					const routeType = getRouteTypeFromServiceType(service.service_type);
+					if (routeType !== "generic") {
+						quoteUrl = getStepUrl(4, routeType);
+					}
+				}
+			}
+		} catch (e) {
+			console.warn("[PhoneVerification] Failed to determine service-specific quote page, using generic", e);
+		}
+
 		const paramsOut = new URLSearchParams();
 		// Required order: userId, contactId, dealId, propertyId, quoteId
 		if (userIdParam) paramsOut.set("userId", String(userIdParam));
@@ -114,7 +138,19 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 		if (dealId) paramsOut.set("dealId", String(dealId));
 		if (propertyId) paramsOut.set("propertyId", String(propertyId));
 		if (quoteId) paramsOut.set("quoteId", String(quoteId));
-		const to = `/steps/04-quote?${paramsOut.toString()}`;
+		// Add service type information
+		try {
+			const deal = await getDeal(dealId);
+			if (deal?.service) {
+				const service = await getServiceById(deal.service);
+				if (service?.service_type) {
+					paramsOut.set("serviceType", service.service_type);
+				}
+			}
+		} catch (e) {
+			// ignore service type if we can't fetch it
+		}
+		const to = `${quoteUrl}?${paramsOut.toString()}`;
 		return (
 			<div className="container">
 				<div className="card">
@@ -127,16 +163,28 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 
 	const phoneVerificationNote = await getPhoneVerificationNote();
 
+	// Get service type for the TwilioSMSForm component
+	let serviceType: string | undefined = undefined;
+	try {
+		const deal = await getDeal(dealId);
+		if (deal?.service) {
+			const service = await getServiceById(deal.service);
+			serviceType = service?.service_type || undefined;
+		}
+	} catch (e) {
+		// ignore service type if we can't fetch it
+	}
+
 	return (
 		<div className="container">
 			<div className="card">
 				<FormHeader rightTitle="Phone verification" rightSubtitle={(status === "active" || status === "published") ? (<><strong>Status:</strong> Verified</>) : (<><strong>Status:</strong> Not verified</>)} />
 				{phoneVerificationNote ? (
-					<div style={{ background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 }}>
-						<div>{phoneVerificationNote}</div>
-					</div>
+					<NoteBox style={{ marginBottom: 16 }}>
+						{phoneVerificationNote}
+					</NoteBox>
 				) : null}
-				<TwilioSMSForm phone={phone} contactId={contactId} dealId={dealId} propertyId={propertyId} redirectSeconds={PHONE_VERIFIED_REDIRECT_SECONDS} quoteId={quoteIdParam} userId={userIdParam} />
+				<TwilioSMSForm phone={phone} contactId={contactId} dealId={dealId} propertyId={propertyId} redirectSeconds={PHONE_VERIFIED_REDIRECT_SECONDS} quoteId={quoteIdParam} userId={userIdParam} serviceType={serviceType} />
 			</div>
 		</div>
 	);

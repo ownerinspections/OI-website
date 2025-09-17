@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { VALIDATION_MESSAGES } from "@/lib/validation/constants";
 
 interface LongDateFieldProps {
     name: string;
@@ -10,6 +11,15 @@ interface LongDateFieldProps {
     defaultValue?: string;
     placeholder?: string;
     required?: boolean;
+    error?: string;
+    onChange?: (date: Date | null) => void;
+}
+
+function validateDateField(date: Date | null, required?: boolean): string | undefined {
+    if (required && !date) {
+        return VALIDATION_MESSAGES.SELECT_DATE;
+    }
+    return undefined;
 }
 
 export default function LongDateField({ 
@@ -17,13 +27,19 @@ export default function LongDateField({
     label, 
     defaultValue = "", 
     placeholder = "Select a date",
-    required = false 
+    required = false,
+    error,
+    onChange
 }: LongDateFieldProps) {
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [displayDate, setDisplayDate] = useState<string>("");
     const [showPlaceholder, setShowPlaceholder] = useState<boolean>(!defaultValue);
     const [isOpen, setIsOpen] = useState<boolean>(false);
+    const [clientError, setClientError] = useState<string | undefined>();
     const datePickerRef = useRef<DatePicker>(null);
+
+    // Show server error if present, otherwise show client validation error
+    const displayError = error || clientError;
 
     // Format date to long format (e.g., "9 September 2025")
     const formatToLongDate = (date: Date | null): string => {
@@ -68,6 +84,9 @@ export default function LongDateField({
     const handleDateChange = (date: Date | null) => {
         setSelectedDate(date);
         setIsOpen(false);
+        const validationError = validateDateField(date, required);
+        setClientError(validationError);
+        onChange?.(date);
     };
 
     const handleCalendarIconClick = () => {
@@ -76,6 +95,14 @@ export default function LongDateField({
 
     const handleInputClick = () => {
         setIsOpen(true);
+    };
+
+    const handleClickOutside = () => {
+        setIsOpen(false);
+    };
+
+    const handleSelect = () => {
+        setIsOpen(false);
     };
 
     return (
@@ -99,8 +126,8 @@ export default function LongDateField({
                     selected={selectedDate}
                     onChange={handleDateChange}
                     open={isOpen}
-                    onSelect={() => setIsOpen(false)}
-                    onClickOutside={() => setIsOpen(false)}
+                    onSelect={handleSelect}
+                    onClickOutside={handleClickOutside}
                     wrapperClassName="datepicker-wrapper"
                     customInput={
                         <div style={{ position: "relative", width: "100%" }}>
@@ -108,14 +135,13 @@ export default function LongDateField({
                                 type="text"
                                 id={name}
                                 value={displayDate || ""}
-                                placeholder={showPlaceholder ? "Select a date (today or later)" : ""}
+                                placeholder={showPlaceholder ? "Select a date" : ""}
                                 readOnly
                                 onClick={handleInputClick}
-                                required={required}
                                 style={{
                                     width: "100%",
                                     padding: "12px 48px 12px 16px",
-                                    border: "1px solid var(--color-light-gray)",
+                                    border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
                                     borderRadius: 6,
                                     fontSize: 14,
                                     color: "var(--color-text-primary)",
@@ -128,7 +154,7 @@ export default function LongDateField({
                                     e.target.style.borderColor = "var(--color-primary-blue)";
                                 }}
                                 onBlur={(e) => {
-                                    e.target.style.borderColor = "var(--color-light-gray)";
+                                    e.target.style.borderColor = displayError ? "var(--color-error)" : "var(--color-light-gray)";
                                 }}
                             />
                             
@@ -192,6 +218,12 @@ export default function LongDateField({
                     value={selectedDate ? selectedDate.toISOString() : ""}
                 />
             </div>
+            
+            {displayError ? (
+                <div style={{ color: "var(--color-error)", fontSize: 12, marginTop: 6 }}>
+                    {displayError}
+                </div>
+            ) : null}
             
             <style jsx global>{`
                 .datepicker-wrapper {

@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import type { InputHTMLAttributes } from "react";
+import { VALIDATION_MESSAGES } from "@/lib/validation/constants";
 
 type TextFieldProps = {
 	name: string;
@@ -6,18 +10,39 @@ type TextFieldProps = {
 	defaultValue?: string;
 	value?: string;
 	error?: string;
+	required?: boolean;
+	readOnly?: boolean;
+	onChange?: React.ChangeEventHandler<HTMLInputElement>;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "name">;
 
-export default function TextField({ name, label, defaultValue, value, error, type, ...rest }: TextFieldProps) {
+function validateTextField(value: string, required?: boolean): string | undefined {
+	if (required && !value?.trim()) {
+		return VALIDATION_MESSAGES.REQUIRED;
+	}
+	return undefined;
+}
+
+export default function TextField({ name, label, defaultValue, value, error, type, required, readOnly, onChange, ...rest }: TextFieldProps) {
+	const [clientError, setClientError] = useState<string | undefined>();
+
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const fieldValue = e.target.value;
+		const validationError = validateTextField(fieldValue, required);
+		setClientError(validationError);
+		onChange?.(e);
+	};
+
+	// Show server error if present, otherwise show client validation error
+	const displayError = error || clientError;
 	const inputStyle: React.CSSProperties = {
 		width: "100%",
 		height: "var(--field-height)",
 		lineHeight: "calc(var(--field-height) - 2px)",
 		borderRadius: 6,
-		border: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+		border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
 		padding: "0 12px",
 		color: "var(--color-text-primary)",
-		background: "var(--color-white)",
+		background: readOnly ? "var(--color-pale-gray)" : "var(--color-white)",
 		boxSizing: "border-box",
 	};
 
@@ -40,9 +65,12 @@ export default function TextField({ name, label, defaultValue, value, error, typ
 
 	return (
 		<div style={fieldStyle}>
-			<label htmlFor={name} style={labelStyle}>{label}</label>
-			<input id={name} name={name} type={type ?? "text"} defaultValue={value === undefined ? defaultValue : undefined} value={value} style={inputStyle} {...rest} />
-			{error ? <div style={errorStyle}>{error}</div> : null}
+			<label htmlFor={name} style={labelStyle}>
+				{label}
+				{required && <span style={{ color: "var(--color-error)", marginLeft: 4 }}>*</span>}
+			</label>
+			<input id={name} name={name} type={type ?? "text"} defaultValue={value === undefined ? defaultValue : undefined} value={value} onChange={handleChange} readOnly={readOnly} style={inputStyle} {...rest} />
+			{displayError ? <div style={errorStyle}>{displayError}</div> : null}
 		</div>
 	);
 }

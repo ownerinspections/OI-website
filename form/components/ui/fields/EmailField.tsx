@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import TextField from "./TextField";
+import { VALIDATION_MESSAGES, VALIDATION_PATTERNS } from "@/lib/validation/constants";
 
 type EmailFieldProps = {
 	name: string;
@@ -10,22 +11,20 @@ type EmailFieldProps = {
 	value?: string;
 	error?: string;
 	required?: boolean;
+	readOnly?: boolean;
 	onChange?: React.ChangeEventHandler<HTMLInputElement>;
 };
-
-// Email validation regex that properly validates email format - no trimming
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 function validateEmail(email: string): string | undefined {
 	if (!email) return undefined;
 	// Don't trim - check the email exactly as entered by the user
-	if (!EMAIL_REGEX.test(email)) {
-		return "Enter a valid email address";
+	if (!VALIDATION_PATTERNS.EMAIL.test(email)) {
+		return VALIDATION_MESSAGES.INVALID_EMAIL;
 	}
 	return undefined;
 }
 
-export default function EmailField({ name, label = "Email", defaultValue, value, error, required, onChange }: EmailFieldProps) {
+export default function EmailField({ name, label = "Email", defaultValue, value, error, required, readOnly, onChange }: EmailFieldProps) {
 	const [clientError, setClientError] = useState<string | undefined>();
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,6 +49,7 @@ export default function EmailField({ name, label = "Email", defaultValue, value,
 			inputMode="email"
 			error={displayError}
 			required={required}
+			readOnly={readOnly}
 		/>
 	);
 }

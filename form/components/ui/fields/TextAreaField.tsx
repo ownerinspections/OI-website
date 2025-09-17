@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import type { TextareaHTMLAttributes } from "react";
+import { VALIDATION_MESSAGES } from "@/lib/validation/constants";
 
 type TextAreaFieldProps = {
 	name: string;
@@ -7,9 +11,29 @@ type TextAreaFieldProps = {
 	value?: string;
 	error?: string;
 	rows?: number;
+	required?: boolean;
+	onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
 } & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "name">;
 
-export default function TextAreaField({ name, label, defaultValue, value, error, rows = 4, ...rest }: TextAreaFieldProps) {
+function validateTextAreaField(value: string, required?: boolean): string | undefined {
+	if (required && !value?.trim()) {
+		return VALIDATION_MESSAGES.REQUIRED;
+	}
+	return undefined;
+}
+
+export default function TextAreaField({ name, label, defaultValue, value, error, rows = 4, required, onChange, ...rest }: TextAreaFieldProps) {
+	const [clientError, setClientError] = useState<string | undefined>();
+
+	const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		const fieldValue = e.target.value;
+		const validationError = validateTextAreaField(fieldValue, required);
+		setClientError(validationError);
+		onChange?.(e);
+	};
+
+	// Show server error if present, otherwise show client validation error
+	const displayError = error || clientError;
 	const labelStyle: React.CSSProperties = {
 		display: "block",
 		marginBottom: 6,
@@ -21,7 +45,7 @@ export default function TextAreaField({ name, label, defaultValue, value, error,
 		width: "100%",
 		minHeight: rows * 24,
 		borderRadius: 6,
-		border: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+		border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
 		padding: 12,
 		color: "var(--color-text-primary)",
 		background: "var(--color-white)",
@@ -41,9 +65,12 @@ export default function TextAreaField({ name, label, defaultValue, value, error,
 
 	return (
 		<div style={fieldStyle}>
-			<label htmlFor={name} style={labelStyle}>{label}</label>
-			<textarea id={name} name={name} defaultValue={value === undefined ? defaultValue : undefined} value={value} rows={rows} style={textareaStyle} {...rest} />
-			{error ? <div style={errorStyle}>{error}</div> : null}
+			<label htmlFor={name} style={labelStyle}>
+				{label}
+				{required && <span style={{ color: "var(--color-error)", marginLeft: 4 }}>*</span>}
+			</label>
+			<textarea id={name} name={name} defaultValue={value === undefined ? defaultValue : undefined} value={value} rows={rows} onChange={handleChange} style={textareaStyle} {...rest} />
+			{displayError ? <div style={errorStyle}>{displayError}</div> : null}
 		</div>
 	);
 }

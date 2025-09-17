@@ -1,0 +1,80 @@
+import PropertiesForm from "@/components/properties/PropertiesForm";
+import { getProperty } from "@/lib/actions/properties/getProperty";
+import { getDeal } from "@/lib/actions/deals/getDeal";
+import { getServiceById } from "@/lib/actions/services/getService";
+import { getPropertyNote } from "@/lib/actions/globals/getGlobal";
+import { extractPropertyDetails } from "@/lib/actions/properties/extractPropertyDetails";
+import FormHeader from "@/components/ui/FormHeader";
+import { redirect } from "next/navigation";
+import { getServiceType, getStepUrl } from "@/lib/config/service-routing";
+
+export default async function StepProperty({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
+	const params = (await searchParams) ?? {};
+	const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
+	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
+	const contactId = typeof params.contactId === "string" ? params.contactId : undefined;
+	const userId = typeof params.userId === "string" ? params.userId : undefined;
+	const quoteId = typeof params.quoteId === "string" ? params.quoteId : undefined;
+	const paymentId = typeof params.paymentId === "string" ? params.paymentId : undefined;
+	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
+
+	if (!dealId || !contactId || !userId) {
+		redirect('/not-found');
+	}
+
+	console.log('[StepProperty] Starting with params:', { dealId, contactId, propertyId, userId });
+
+	const [property, deal, propertyNote] = await Promise.all([
+		propertyId ? getProperty(propertyId) : Promise.resolve(undefined),
+		dealId ? getDeal(dealId) : Promise.resolve(null),
+		getPropertyNote(),
+	]);
+
+	console.log('[StepProperty] Retrieved data:', { deal: deal?.name, dealService: deal?.service });
+
+	const serviceId = deal?.service ?? undefined;
+	const service = serviceId ? await getServiceById(serviceId) : null;
+
+	console.log('[StepProperty] Deal and service info:', { dealId, serviceId, service: service?.service_name });
+
+	// Redirect to service-specific step if we have a service
+	if (serviceId) {
+		const serviceType = getServiceType(Number(serviceId));
+		const serviceSpecificUrl = getStepUrl(2, serviceType);
+		console.log('[StepProperty] Redirecting to service-specific step:', { serviceId, serviceType, serviceSpecificUrl });
+		const paramsOut = new URLSearchParams();
+		if (userId) paramsOut.set("userId", String(userId));
+		if (contactId) paramsOut.set("contactId", String(contactId));
+		if (dealId) paramsOut.set("dealId", String(dealId));
+		if (propertyId) paramsOut.set("propertyId", String(propertyId));
+		if (quoteId) paramsOut.set("quoteId", String(quoteId));
+		if (paymentId) paramsOut.set("paymentId", String(paymentId));
+		if (invoiceId) paramsOut.set("invoiceId", String(invoiceId));
+		redirect(`${serviceSpecificUrl}?${paramsOut.toString()}`);
+	}
+
+	// Fallback for when no service is selected (shouldn't happen in normal flow)
+	console.log('[StepProperty] No service found, using fallback form');
+	return (
+		<div className="container">
+			<div className="card">
+				<FormHeader rightTitle="Property details" />
+				<PropertiesForm
+					property={property}
+					propertyId={propertyId}
+					contactId={contactId}
+					userId={userId}
+					dealId={dealId}
+					quoteId={quoteId}
+					paymentId={paymentId}
+					invoiceId={invoiceId}
+					serviceId={serviceId}
+					serviceName={service?.service_name}
+					propertyCategory={property?.property_category as any}
+					propertyNote={propertyNote}
+					onExtract={extractPropertyDetails}
+				/>
+			</div>
+		</div>
+	);
+}

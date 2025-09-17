@@ -3,8 +3,9 @@ import { getProperty } from "@/lib/actions/properties/getProperty";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { getServiceById } from "@/lib/actions/services/getService";
 import { getPropertyNote } from "@/lib/actions/globals/getGlobal";
-import { extractPropertyDetails } from "@/lib/actions/properties/extractPropertyDetails";
 import FormHeader from "@/components/ui/FormHeader";
+import { redirect } from "next/navigation";
+import { getServiceType, getStepUrl } from "@/lib/config/service-routing";
 
 export default async function StepProperty({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -16,15 +17,50 @@ export default async function StepProperty({ searchParams }: { searchParams?: Pr
 	const paymentId = typeof params.paymentId === "string" ? params.paymentId : undefined;
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
 
-	const [property, deal, propertyNote] = await Promise.all([
-		propertyId ? getProperty(propertyId) : Promise.resolve(undefined),
+	if (!dealId || !contactId || !userId) {
+		redirect('/not-found');
+	}
+
+	console.log('[StepProperty] Starting with params:', { dealId, contactId, propertyId, userId });
+
+	// Batch 1: Run independent API calls in parallel
+	const [deal, propertyNote, propertyResult] = await Promise.all([
 		dealId ? getDeal(dealId) : Promise.resolve(null),
 		getPropertyNote(),
+		// For single property services, fetch the property
+		// For multi-property services (like dilapidation), skip fetching here as it will be handled by the service-specific page
+		(propertyId && !propertyId.includes(',')) ? getProperty(propertyId) : Promise.resolve(undefined),
 	]);
 
+	// Handle property result to ensure proper typing
+	const property = propertyResult || undefined;
+
+	console.log('[StepProperty] Retrieved data:', { deal: deal?.name, dealService: deal?.service });
+
+	// Batch 2: Get service after deal resolves (depends on deal.service)
 	const serviceId = deal?.service ?? undefined;
 	const service = serviceId ? await getServiceById(serviceId) : null;
 
+	console.log('[StepProperty] Deal and service info:', { dealId, serviceId, service: service?.service_name });
+
+	// Redirect to service-specific step if we have a service
+	if (serviceId) {
+		const serviceType = getServiceType(Number(serviceId));
+		const serviceSpecificUrl = getStepUrl(2, serviceType);
+		console.log('[StepProperty] Redirecting to service-specific step:', { serviceId, serviceType, serviceSpecificUrl });
+		const paramsOut = new URLSearchParams();
+		if (userId) paramsOut.set("userId", String(userId));
+		if (contactId) paramsOut.set("contactId", String(contactId));
+		if (dealId) paramsOut.set("dealId", String(dealId));
+		if (propertyId) paramsOut.set("propertyId", String(propertyId));
+		if (quoteId) paramsOut.set("quoteId", String(quoteId));
+		if (paymentId) paramsOut.set("paymentId", String(paymentId));
+		if (invoiceId) paramsOut.set("invoiceId", String(invoiceId));
+		redirect(`${serviceSpecificUrl}?${paramsOut.toString()}`);
+	}
+
+	// Fallback for when no service is selected (shouldn't happen in normal flow)
+	console.log('[StepProperty] No service found, using fallback form');
 	return (
 		<div className="container">
 			<div className="card">
@@ -42,7 +78,6 @@ export default async function StepProperty({ searchParams }: { searchParams?: Pr
 					serviceName={service?.service_name}
 					propertyCategory={property?.property_category as any}
 					propertyNote={propertyNote}
-					onExtract={extractPropertyDetails}
 				/>
 			</div>
 		</div>

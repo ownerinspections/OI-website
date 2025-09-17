@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
+import { VALIDATION_MESSAGES } from "@/lib/validation/constants";
 
 type AutoFillOption = {
 	value: string;
@@ -18,6 +19,7 @@ type AutoFillFieldProps = {
 	placeholder?: string;
 	error?: string;
 	hint?: string;
+	required?: boolean;
 	onSelect?: (option: AutoFillOption) => void;
 	// When provided, will be called with the current query whenever the user types
 	onInputChange?: (query: string) => void;
@@ -30,6 +32,13 @@ type AutoFillFieldProps = {
 	// When true, submit the selected label as the hidden input value instead of option.value
 	submitSelectedLabel?: boolean;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "name" | "defaultValue" | "onSelect">;
+
+function validateAutoFillField(selectedValue: string, required?: boolean): string | undefined {
+	if (required && !selectedValue?.trim()) {
+		return VALIDATION_MESSAGES.SELECT_OPTION;
+	}
+	return undefined;
+}
 
 export default function AutoFillField({
 	id,
@@ -51,6 +60,7 @@ export default function AutoFillField({
 	submitSelectedLabel,
 	...rest
 }: AutoFillFieldProps) {
+	const [clientError, setClientError] = useState<string | undefined>();
 	const reactId = useId();
 	const fieldId = id ?? `${name}-${reactId}`;
 	const listboxId = `${fieldId}-listbox`;
@@ -58,6 +68,10 @@ export default function AutoFillField({
 	const errorId = error ? `${fieldId}-error` : undefined;
 	const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
 
+	// Show server error if present, otherwise show client validation error
+	const displayError = error || clientError;
+
+	const [isClient, setIsClient] = useState(false);
 	const [query, setQuery] = useState<string>(defaultValue ?? "");
 	const [selectedValue, setSelectedValue] = useState<string>(defaultSelectedValue ?? "");
 	const [open, setOpen] = useState<boolean>(false);
@@ -66,6 +80,11 @@ export default function AutoFillField({
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	const normalizedOptions = useMemo(() => options ?? [], [options]);
+
+	// Set isClient to true after hydration to prevent serialization errors
+	useEffect(() => {
+		setIsClient(true);
+	}, []);
 
 	// Sync visible input and selected value when default props change (e.g., server-side prefill)
 	useEffect(() => {
@@ -101,9 +120,18 @@ export default function AutoFillField({
 		setSelectedValue(opt.value);
 		setOpen(false);
 		setActiveIndex(-1);
+		
+		// Validate the selection
+		const validationError = validateAutoFillField(opt.value, required);
+		setClientError(validationError);
+		
 		if (typeof onSelect === "function") onSelect(opt);
 		// Blur the input to move cursor out after selecting an option
 		inputRef.current?.blur();
+	}
+
+	function handleOptionClick(opt: AutoFillOption) {
+		return () => commitSelection(opt);
 	}
 
 	function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -164,7 +192,7 @@ export default function AutoFillField({
 		height: "var(--field-height)",
 		lineHeight: "calc(var(--field-height) - 2px)",
 		borderRadius: 6,
-		border: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+		border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
 		padding: loading ? "0 36px 0 12px" : "0 12px",
 		color: disabled ? "var(--color-text-muted)" : "var(--color-text-primary)",
 		background: "var(--color-white)",
@@ -206,7 +234,10 @@ export default function AutoFillField({
 
 	return (
 		<div style={fieldStyle}>
-			<label htmlFor={fieldId} style={labelStyle}>{label}</label>
+			<label htmlFor={fieldId} style={labelStyle}>
+				{label}
+				{required && <span style={{ color: "var(--color-error)", marginLeft: 4 }}>*</span>}
+			</label>
 			<div ref={wrapperRef} style={wrapperStyle}>
 				<input
 					id={fieldId}
@@ -219,13 +250,17 @@ export default function AutoFillField({
 						setSelectedValue("");
 						setOpen(true);
 						setActiveIndex(-1);
+						
+						// Clear validation error when user starts typing
+						setClientError(undefined);
+						
 						if (typeof onInputChange === "function") onInputChange(e.target.value);
 					}}
 					onFocus={() => setOpen(true)}
 					onKeyDown={onKeyDown}
 					placeholder={placeholder}
 					disabled={disabled}
-					aria-invalid={!!error}
+					aria-invalid={!!displayError}
 					aria-describedby={describedBy}
 					aria-autocomplete="list"
 					aria-expanded={open}
@@ -254,9 +289,10 @@ export default function AutoFillField({
 									key={opt.value}
 									role="option"
 									aria-selected={isActive}
-									onMouseEnter={() => setActiveIndex(idx)}
+
+									onMouseEnter={isClient ? () => setActiveIndex(idx) : undefined}
 									onMouseDown={(e) => e.preventDefault()}
-									onClick={() => commitSelection(opt)}
+									onClick={isClient ? handleOptionClick(opt) : undefined}
 									style={{
 										...optionStyleBase,
 										background: isActive ? "var(--color-pale-gray)" : "var(--color-white)",
@@ -270,7 +306,7 @@ export default function AutoFillField({
 				) : null}
 			</div>
 			{hint ? <div id={hintId} style={hintStyle}>{hint}</div> : null}
-			{error ? <div id={errorId} style={errorStyle}>{error}</div> : null}
+			{displayError ? <div id={errorId} style={errorStyle}>{displayError}</div> : null}
 		</div>
 	);
 }

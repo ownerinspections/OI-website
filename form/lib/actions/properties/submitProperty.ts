@@ -12,10 +12,29 @@ export type SubmitResult = {
 };
 
 export async function submitProperty(_prev: SubmitResult, formData: FormData): Promise<SubmitResult> {
+	console.log("[submitProperty] Server action called");
 	const property_id = String(formData.get("property_id") ?? "").trim();
 	const deal_id = String(formData.get("deal_id") ?? "").trim();
 	const contact_id = String(formData.get("contact_id") ?? "").trim();
 	const user_id = String(formData.get("user_id") ?? "").trim();
+	const service_id = String(formData.get("service_id") ?? "").trim();
+	
+	console.log("[submitProperty] Form data:", {
+		property_id,
+		deal_id,
+		contact_id,
+		user_id,
+		service_id,
+		full_address: formData.get("full_address"),
+		street_address: formData.get("street_address"),
+		suburb: formData.get("suburb"),
+		state: formData.get("state"),
+		post_code: formData.get("post_code"),
+		quoting_property_classification: formData.get("quoting_property_classification"),
+		quoting_property_type: formData.get("quoting_property_type"),
+		area_sq: formData.get("area_sq"),
+		number_of_levels: formData.get("number_of_levels")
+	});
 
 	const number_of_bedrooms = String(formData.get("number_of_bedrooms") ?? "").trim();
 	const number_of_bathrooms = String(formData.get("number_of_bathrooms") ?? "").trim();
@@ -77,44 +96,85 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 
 	const errors: Record<string, string> = {};
 
-	// Address must be selected
-	if (!full_address) {
-		errors.full_address = "Please select a valid address";
-	}
-	if (full_address && (!suburb || !state || !post_code)) {
-		errors.full_address = "Please select a valid address suggestion";
+	// Services that don't require address fields and property details (5, 6, 7, 8)
+	const servicesWithoutPropertyDetails = [5, 6, 7, 8];
+	const serviceIdNumber = service_id ? parseInt(service_id, 10) : null;
+	const isAddressRequired = !serviceIdNumber || !servicesWithoutPropertyDetails.includes(serviceIdNumber);
+	const showPropertyDetails = !serviceIdNumber || !servicesWithoutPropertyDetails.includes(serviceIdNumber);
+
+	// Address must be selected (only for services that require it)
+	if (isAddressRequired) {
+		if (!full_address) {
+			errors.full_address = "Please select a valid address";
+		}
+		if (full_address && (!suburb || !state || !post_code)) {
+			errors.full_address = "Please select a valid address suggestion";
+		}
 	}
 
-	// Required quoting fields
-	if (!quoting_property_classification) errors.quoting_property_classification = "Required";
-	if (!quoting_property_type) errors.quoting_property_type = "Required";
-	if (!quoting_bedrooms_including_study) errors.quoting_bedrooms_including_study = "Required";
-	if (!quoting_bathrooms_rounded) errors.quoting_bathrooms_rounded = "Required";
+	// Required quoting fields (only for services that need property details)
+	if (showPropertyDetails) {
+		if (!quoting_property_classification) errors.quoting_property_classification = "Required";
+		if (!quoting_property_type) errors.quoting_property_type = "Required";
+		if (!quoting_bedrooms_including_study) errors.quoting_bedrooms_including_study = "Required";
+		if (!quoting_bathrooms_rounded) errors.quoting_bathrooms_rounded = "Required";
 
-	// Property-type specific required fields
-	const isApartmentUnit = quoting_property_type.toLowerCase() === "apartment/unit";
-	if (!isApartmentUnit) {
-		if (!quoting_levels) errors.quoting_levels = "Required";
-		if (!quoting_has_basement_or_subfloor) errors.quoting_has_basement_or_subfloor = "Required";
-		// additional_structures is optional
+		// Property-type specific required fields
+		const isApartmentUnit = quoting_property_type.toLowerCase() === "apartment/unit";
+		if (!isApartmentUnit) {
+			if (!quoting_levels) errors.quoting_levels = "Required";
+			if (!quoting_has_basement_or_subfloor) errors.quoting_has_basement_or_subfloor = "Required";
+			// additional_structures is optional
+		}
+
+		// Numeric checks
+		if (quoting_bedrooms_including_study && !/^\d+$/.test(quoting_bedrooms_including_study)) {
+			errors.quoting_bedrooms_including_study = "Must be a number";
+		}
+		if (quoting_bathrooms_rounded && !/^\d+$/.test(quoting_bathrooms_rounded)) {
+			errors.quoting_bathrooms_rounded = "Must be a number";
+		}
+		if (quoting_levels && !/^\d+$/.test(quoting_levels)) {
+			errors.quoting_levels = "Must be a number";
+		}
 	}
 
-	// Numeric checks
-	if (quoting_bedrooms_including_study && !/^\d+$/.test(quoting_bedrooms_including_study)) {
-		errors.quoting_bedrooms_including_study = "Must be a number";
-	}
-	if (quoting_bathrooms_rounded && !/^\d+$/.test(quoting_bathrooms_rounded)) {
-		errors.quoting_bathrooms_rounded = "Must be a number";
-	}
-	if (quoting_levels && !/^\d+$/.test(quoting_levels)) {
-		errors.quoting_levels = "Must be a number";
+	// Services that need basic property category/type fields (5, 6, 7, 8)
+	const servicesWithPropertyCategoryType = [5, 6, 7, 8];
+	const showPropertyCategoryType = serviceIdNumber && servicesWithPropertyCategoryType.includes(serviceIdNumber);
+	
+	if (showPropertyCategoryType) {
+		if (!quoting_property_classification) errors.quoting_property_classification = "Required";
+		if (!quoting_property_type) errors.quoting_property_type = "Required";
+		
+		// Construction stages specific fields (service 5)
+		if (serviceIdNumber === 5) {
+			if (!area_sq) errors.area_sq = "Required";
+			if (!number_of_levels) errors.number_of_levels = "Required";
+			
+			// Numeric checks for construction stages
+			if (area_sq && !/^\d+(\.\d+)?$/.test(area_sq)) {
+				errors.area_sq = "Must be a number";
+			}
+			if (number_of_levels && !/^\d+$/.test(number_of_levels)) {
+				errors.number_of_levels = "Must be a number";
+			}
+		}
 	}
 
 	if (Object.keys(errors).length > 0) {
+		console.log("[submitProperty] Validation errors:", errors);
 		return { success: false, errors };
 	}
 
 	try {
+		console.log("[submitProperty] Building payload for service:", serviceIdNumber, {
+			area_sq,
+			number_of_levels,
+			quoting_levels,
+			showPropertyCategoryType
+		});
+		
 		// Build payload with available keys
 		const payload: Record<string, unknown> = {
 			// Address
@@ -127,9 +187,11 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			// Quoting-derived fields mapped to backend keys
 			number_of_bedrooms: quoting_bedrooms_including_study ? Number(quoting_bedrooms_including_study) : null,
 			number_of_bathrooms: quoting_bathrooms_rounded ? Number(quoting_bathrooms_rounded) : null,
-			number_of_levels: quoting_levels ? Number(quoting_levels) : null,
+			number_of_levels: quoting_levels ? Number(quoting_levels) : (number_of_levels ? Number(number_of_levels) : null),
 			property_category: quoting_property_classification ? quoting_property_classification.toLowerCase() : null,
 			property_type: quoting_property_type || null,
+			// Construction stages specific fields
+			area_sq: area_sq ? Number(area_sq) : null,
 			basement: quoting_has_basement_or_subfloor
 				? (quoting_has_basement_or_subfloor.toLowerCase() === "yes" ? true : quoting_has_basement_or_subfloor.toLowerCase() === "no" ? false : null)
 				: null,
@@ -150,6 +212,15 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			deals: deal_id || null,
 			...(user_id ? { user: user_id } : {}),
 		};
+
+		console.log("[submitProperty] Final payload:", {
+			...payload,
+			// Highlight construction stages specific fields
+			area_sq: payload.area_sq,
+			number_of_levels: payload.number_of_levels,
+			property_category: payload.property_category,
+			property_type: payload.property_type
+		});
 
 		let resultingPropertyId: string | undefined = undefined;
 		if (property_id) {
@@ -173,6 +244,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 		if (contact_id) next.searchParams.set("contactId", contact_id);
 		if (deal_id) next.searchParams.set("dealId", deal_id);
 		if (resultingPropertyId) next.searchParams.set("propertyId", String(resultingPropertyId));
+		console.log("[submitProperty] Success - redirecting to:", `${next.pathname}${next.search}`);
 		return { success: true, nextUrl: `${next.pathname}${next.search}` };
 	} catch (_e) {
 		return { success: false, message: "Failed to save property" };

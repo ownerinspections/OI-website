@@ -3,7 +3,13 @@
 import React from "react";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import AddonTooltip from "@/components/ui/AddonTooltip";
+import StageTooltip from "@/components/ui/StageTooltip";
+import Toggle from "@/components/ui/Toggle";
+import InfoBox from "@/components/ui/messages/InfoBox";
+import WarningBox from "@/components/ui/messages/WarningBox";
+import NoteBox from "@/components/ui/messages/NoteBox";
 import { fetchGstRate } from "@/lib/actions/invoices/createInvoice";
+import { estimateInsuranceReportQuote, type PropertyDetails } from "@/lib/actions/quotes/estimateQuote";
 
 // Server action to create invoice and approve proposal
 async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string, paymentId?: string) {
@@ -87,9 +93,17 @@ type Props = {
     preselectedAddonIds?: number[];
     userId?: string;
     gstRate?: number;
+    proposalStatus?: string;
+    stagePrices?: Array<{ stage: number; price: number }>;
+    preselectedStages?: number[];
+    estimatedDamageLoss?: number;
+    onEstimatedDamageLossChange?: (value: number) => void;
+    showInspectionBox?: boolean;
+    propertyCategory?: string;
+    serviceId?: number;
 };
 
-export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, paymentId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId, gstRate }: Props) {
+export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, paymentId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId, gstRate, proposalStatus, stagePrices, preselectedStages, estimatedDamageLoss, onEstimatedDamageLossChange, showInspectionBox = true, propertyCategory = "residential", serviceId }: Props) {
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 };
 	const headerLeftSpacerStyle: React.CSSProperties = { flex: 1 };
@@ -98,44 +112,12 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	const labelStyle: React.CSSProperties = { color: "var(--color-text-secondary)" };
 	const valueStyle: React.CSSProperties = { color: "var(--color-text-primary)", fontWeight: 500 };
 	// Removed local header to rely on page-level step header
-	const noteStyle: React.CSSProperties = { background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 };
 	const actionsStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", marginTop: 16, gap: 8 };
 	const addonRowStyle: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: 8, border: "1px solid #d9d9d9", borderRadius: 6, marginBottom: 8 };
 	const addonNameStyle: React.CSSProperties = { color: "var(--color-text-primary)", fontWeight: 500 };
 	const addonPriceStyle: React.CSSProperties = { color: "var(--color-primary)", fontWeight: 600 };
-	const infoBoxStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "#ffffff", border: "1px solid #3b82f6", color: "#595959", borderRadius: 6, padding: 8, marginBottom: 8 };
-	const warnBoxStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, background: "#ffffff", border: "1px solid #f59e0b", color: "#595959", borderRadius: 6, padding: 8, marginBottom: 8 };
 	const inspectionBoxStyle: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", background: "#ffffff", border: "1px solid #d9d9d9", color: "var(--color-text-primary)", borderRadius: 6, padding: 8, marginBottom: 8 };
 
-	const Toggle: React.FC<{ checked: boolean; onChange: (next: boolean) => void }> = ({ checked, onChange }) => {
-		const trackStyle: React.CSSProperties = {
-			width: 44,
-			height: 24,
-			borderRadius: 999,
-			background: checked ? "var(--color-primary)" : "#d9d9d9",
-			position: "relative",
-			border: "none",
-			outline: "none",
-			cursor: "pointer",
-			padding: 2,
-			display: "inline-flex",
-			alignItems: "center",
-		};
-		const knobStyle: React.CSSProperties = {
-			width: 20,
-			height: 20,
-			borderRadius: 999,
-			background: "#fff",
-			boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-			transform: checked ? "translateX(20px)" : "translateX(0px)",
-			transition: "transform 0.15s ease-in-out",
-		};
-		return (
-			<button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} style={trackStyle}>
-				<span style={knobStyle} />
-			</button>
-		);
-	};
 
 	const [selected, setSelected] = React.useState<Record<number, boolean>>(() => {
 		const map: Record<number, boolean> = {};
@@ -145,11 +127,109 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 		return map;
 	});
 
-	const baseAmount = Number((quote as any)?.inspection_amount ?? (quote as any)?.quote_amount ?? quote?.amount ?? 0);
+	const [selectedStages, setSelectedStages] = React.useState<Record<number, boolean>>(() => {
+		const map: Record<number, boolean> = {};
+		(stagePrices || []).forEach((s) => {
+			map[s.stage] = Array.isArray(preselectedStages) ? preselectedStages.includes(s.stage) : true; // Default to true for stages
+		});
+		return map;
+	});
+
+	// State for stage names
+	const [stageNames, setStageNames] = React.useState<Record<number, string>>({});
+
+	// Fetch stage names when serviceId or stagePrices change
+	React.useEffect(() => {
+		if (!serviceId || !Array.isArray(stagePrices) || stagePrices.length === 0) {
+			return;
+		}
+
+		const fetchStageNames = async () => {
+			try {
+				const response = await fetch(`/api/services/${serviceId}`);
+				if (response.ok) {
+					const data = await response.json();
+					if (data.data && Array.isArray(data.data.stages)) {
+						const names: Record<number, string> = {};
+						data.data.stages.forEach((stage: any) => {
+							const stageNum = Number(stage.stage_number);
+							if (Number.isFinite(stageNum)) {
+								names[stageNum] = stage.stage_name || `Stage ${stageNum}`;
+							}
+						});
+						setStageNames(names);
+					}
+				}
+			} catch (error) {
+				console.warn('Failed to fetch stage names:', error);
+			}
+		};
+
+		fetchStageNames();
+	}, [serviceId, stagePrices]);
+
+	// State for estimated damage loss and dynamic stage prices
+	const [currentEstimatedDamageLoss, setCurrentEstimatedDamageLoss] = React.useState(estimatedDamageLoss || 100000);
+	const [currentStagePrices, setCurrentStagePrices] = React.useState(stagePrices || []);
+	const [isUpdatingQuote, setIsUpdatingQuote] = React.useState(false);
+
+	// Debounced function to update quote when estimated damage loss changes
+	const updateQuoteFromDamageLoss = React.useCallback(
+		React.useMemo(() => {
+			let timeoutId: NodeJS.Timeout;
+			return (newValue: number) => {
+				clearTimeout(timeoutId);
+				timeoutId = setTimeout(async () => {
+					if (newValue > 0 && propertyCategory) {
+						setIsUpdatingQuote(true);
+						try {
+							const propertyDetails: PropertyDetails = {
+								property_category: propertyCategory as "residential" | "commercial",
+								stages: [1, 2],
+								estimated_damage_loss: newValue
+							};
+							
+							const estimate = await estimateInsuranceReportQuote(propertyDetails);
+							if (estimate?.stage_prices) {
+								setCurrentStagePrices(estimate.stage_prices);
+							}
+						} catch (error) {
+							console.error("Failed to update quote:", error);
+						} finally {
+							setIsUpdatingQuote(false);
+						}
+					}
+				}, 500); // 500ms debounce
+			};
+		}, [propertyCategory]),
+		[propertyCategory]
+	);
+
+	const handleEstimatedDamageLossChange = (value: number) => {
+		setCurrentEstimatedDamageLoss(value);
+		updateQuoteFromDamageLoss(value);
+		if (onEstimatedDamageLossChange) {
+			onEstimatedDamageLossChange(value);
+		}
+	};
+
+	// Calculate base amount from selected stages if stagePrices are provided, otherwise use quote amount
+	const baseAmount = React.useMemo(() => {
+		const pricesToUse = currentStagePrices.length > 0 ? currentStagePrices : (stagePrices || []);
+		if (pricesToUse.length > 0) {
+			return pricesToUse.reduce((sum, s) => (selectedStages[s.stage] ? sum + Number(s.price || 0) : sum), 0);
+		}
+		return Number((quote as any)?.inspection_amount ?? (quote as any)?.quote_amount ?? quote?.amount ?? 0);
+	}, [currentStagePrices, stagePrices, selectedStages, quote]);
+
 	const addonsTotal = (addons || []).reduce((sum, a) => (selected[a.id] ? sum + Number(a.price || 0) : sum), 0);
 	const subtotalExcludingGst = baseAmount + addonsTotal;
 	const gstAmount = +(subtotalExcludingGst * ((gstRate || 10) / 100)).toFixed(2);
 	const totalAmountIncludingGst = +(subtotalExcludingGst + gstAmount).toFixed(2);
+
+	const handleAcceptQuoteClick = () => {
+		createInvoiceAndNavigate(String(quote?.id), dealId || "", contactId || "", propertyId || "", subtotalExcludingGst, invoiceId || undefined, userId || undefined, paymentId || undefined);
+	};
 
 	// Debounce patch to server when total changes
 	React.useEffect(() => {
@@ -164,16 +244,26 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					.filter(([, on]) => Boolean(on))
 					.map(([id]) => Number(id))
 					.filter((n) => Number.isFinite(n));
+				
+				const selectedStageNumbers = Object.entries(selectedStages)
+					.filter(([, on]) => Boolean(on))
+					.map(([stage]) => Number(stage))
+					.filter((n) => Number.isFinite(n));
+
 				await fetch(`/api/proposals/${encodeURIComponent(String(id))}/total`, {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ total, addons: selectedAddonIds }),
+					body: JSON.stringify({ 
+						total, 
+						addons: selectedAddonIds,
+						stages: selectedStageNumbers
+					}),
 					cache: "no-store",
 				});
 			} catch {}
 		}, 300);
 		return () => { alive = false; clearTimeout(timer); };
-	}, [quote?.id, totalAmountIncludingGst, selected]);
+	}, [quote?.id, totalAmountIncludingGst, selected, selectedStages]);
 
 	const prevHref = (() => {
 		const params = new URLSearchParams();
@@ -196,45 +286,122 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 			{/* Header (mirrors invoice header right-side meta) */}
 			{/* Secondary quote details removed - now shown in page header only */}
 			{(quoteNote ?? quote?.quote_note) ? (
-				<div style={noteStyle}>
+				<NoteBox style={{ marginBottom: 16 }}>
 					<div>{quoteNote ?? quote?.quote_note}</div>
+				</NoteBox>
+			) : null}
+			{Array.isArray(currentStagePrices) && currentStagePrices.length > 0 ? (
+				<div style={{ marginTop: 8, marginBottom: 8 }}>
+					{showInspectionBox && (
+						<div style={inspectionBoxStyle}>
+							<span style={{ fontWeight: 600 }}>{quote.service_label || quote.service_code || "Inspection"}</span>
+							{/* Hide price for insurance reports with stages */}
+							{!(Array.isArray(currentStagePrices) && currentStagePrices.length > 0) && (
+								<span style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 16 }}>
+									{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(baseAmount)}
+								</span>
+							)}
+						</div>
+					)}
+					{/* Estimated Damage Loss field for insurance reports - moved to top */}
+					{estimatedDamageLoss !== undefined && (
+						<div style={{ marginBottom: 16 }}>
+							<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+								<label style={{ ...labelStyle, width: "50%" }}>Estimated Damage Loss amount:</label>
+								<div style={{ position: "relative", width: "50%" }}>
+									<input
+										type="text"
+										value={currentEstimatedDamageLoss.toLocaleString()}
+										onChange={(e) => {
+											// Remove commas and parse the number
+											const numericValue = e.target.value.replace(/,/g, '');
+											const parsedValue = Number(numericValue) || 0;
+											handleEstimatedDamageLossChange(parsedValue);
+										}}
+										style={{
+											width: "100%",
+											padding: "8px 50px 8px 8px",
+											border: "1px solid #d9d9d9",
+											borderRadius: 4,
+											fontSize: 14
+										}}
+										placeholder="Enter estimated damage loss"
+										disabled={isUpdatingQuote}
+									/>
+									<span style={{ 
+										position: "absolute", 
+										right: 8, 
+										top: "50%", 
+										transform: "translateY(-50%)", 
+										...labelStyle, 
+										fontSize: 12,
+										pointerEvents: "none"
+									}}>AUD</span>
+								</div>
+								{isUpdatingQuote && (
+									<span style={{ ...labelStyle, fontSize: 12, color: "var(--color-primary)" }}>Updating...</span>
+								)}
+							</div>
+						</div>
+					)}
+					<InfoBox>
+						<div>
+							<div style={{ fontWeight: 600 }}>Inspection Stages</div>
+							<div style={{ fontSize: 12, marginTop: 2 }}>Select which stages you'd like to include in your inspection. Toggle items below on or off — totals update automatically.</div>
+						</div>
+					</InfoBox>
+					<div>
+						{currentStagePrices.map((s) => (
+							<div key={s.stage} style={addonRowStyle}>
+					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+						<Toggle checked={Boolean(selectedStages[s.stage])} onChange={(next) => setSelectedStages((prev) => ({ ...prev, [s.stage]: next }))} />
+						{serviceId ? (
+							<StageTooltip serviceId={serviceId} stageNumber={s.stage}>
+								<span style={addonNameStyle}>
+									{stageNames[s.stage] 
+										? `Stage ${s.stage} - ${stageNames[s.stage]}`
+										: `Stage ${s.stage}`
+									}
+								</span>
+							</StageTooltip>
+						) : (
+							<span style={addonNameStyle}>Stage {s.stage}</span>
+						)}
+					</div>
+								<span style={addonPriceStyle}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(s.price || 0)}</span>
+							</div>
+						))}
+					</div>
 				</div>
 			) : null}
 			{Array.isArray(addons) && addons.length > 0 ? (
 				<div style={{ marginTop: 8, marginBottom: 8 }}>
-					<div style={inspectionBoxStyle}>
-						<span style={{ fontWeight: 600 }}>{quote.service_label || quote.service_code || "Inspection"}</span>
-						<span style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 16 }}>
-							{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(baseAmount)}
-						</span>
-					</div>
-					<div style={infoBoxStyle}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#3b82f6" }}>
-							<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
-							<line x1="12" y1="10" x2="12" y2="16" stroke="currentColor" strokeWidth="2" />
-							<circle cx="12" cy="7" r="1" fill="currentColor" />
-						</svg>
+					{/* Only show inspection box if we don't have stages (to avoid duplication) */}
+					{!(Array.isArray(stagePrices) && stagePrices.length > 0) && (
+						<div style={inspectionBoxStyle}>
+							<span style={{ fontWeight: 600 }}>{quote.service_label || quote.service_code || "Inspection"}</span>
+							<span style={{ ...valueStyle, color: "var(--color-primary)", fontSize: 16 }}>
+								{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(baseAmount)}
+							</span>
+						</div>
+					)}
+					<InfoBox>
 						<div>
 							<div style={{ fontWeight: 600 }}>Optional add-ons</div>
 							<div style={{ fontSize: 12, marginTop: 2 }}>Add extra services to tailor your quote. Toggle items below on or off — totals update automatically.</div>
 						</div>
-					</div>
+					</InfoBox>
 					{(() => {
 						const risk = (termiteRisk || "").toString().toLowerCase();
 						if (risk === "high" || risk === "moderate" || risk === "low") {
 							const riskLabel = termiteRisk?.charAt(0).toUpperCase() + (termiteRisk?.slice(1).toLowerCase() || "");
 							return (
-								<div style={warnBoxStyle}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#f59e0b" }}>
-										<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-										<circle cx="12" cy="16" r="1" fill="currentColor" />
-										<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-									</svg>
+								<WarningBox>
 									<div>
 										<div style={{ fontWeight: 600 }}>Termite risk: {riskLabel}</div>
 										<div style={{ fontSize: 12, marginTop: 2 }}>We recommend adding Pest Inspection, Thermal Imaging, and Moisture Meter to your quote for additional peace of mind{termiteRiskReason ? ` — ${termiteRiskReason}` : ""}.</div>
 									</div>
-								</div>
+								</WarningBox>
 							);
 						}
 						return null;
@@ -272,15 +439,17 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 			</div>
 
 
-			<div style={actionsStyle}>
-				<PreviousButton href={prevHref} />
-				<button 
-					className="button-primary" 
-					onClick={() => createInvoiceAndNavigate(String(quote.id), dealId || "", contactId || "", propertyId || "", subtotalExcludingGst, invoiceId || undefined, userId || undefined, paymentId || undefined)}
-				>
-					Accept Quote
-				</button>
-			</div>
+			{proposalStatus !== "approved" && (
+				<div style={actionsStyle}>
+					<PreviousButton href={prevHref} />
+					<button 
+						className="button-primary" 
+						onClick={handleAcceptQuoteClick}
+					>
+						Accept Quote
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

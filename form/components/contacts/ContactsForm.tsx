@@ -131,6 +131,7 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 							error={serviceIdError}
 							onSelect={(opt) => setServiceId(opt.value)}
 							autoComplete="off"
+							required
 						/>
 					</div>
 					{/* Address fields removed on step 1 */}

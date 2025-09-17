@@ -60,6 +60,49 @@ input, select, textarea {
 .form-header-meta-item .value { color: var(--color-text-secondary); font-weight: 400; }
 .form-header-meta-item .label::after { content: ": "; }
 
+/* Responsive form header for small screens */
+@media (max-width: 640px) {
+	.form-header { 
+		flex-direction: column; 
+		align-items: center; 
+		text-align: center; 
+		gap: 12px; 
+		padding: 12px 0 8px; 
+	}
+	.form-header-left { 
+		width: 100%; 
+		justify-content: center; 
+	}
+	.form-header-brand { 
+		align-items: center; 
+		width: 100%; 
+	}
+	.form-header-logo { 
+		width: 180px; 
+		height: 50px; 
+		margin: 0 auto; 
+	}
+	.form-header-contacts { 
+		justify-content: center; 
+		margin-top: 8px; 
+	}
+	.contact-row { 
+		justify-content: center; 
+	}
+	.form-header-right { 
+		text-align: center; 
+		width: 100%; 
+	}
+	.form-header-right-title { 
+		font-size: 20px; 
+		margin-bottom: 4px; 
+	}
+	.form-header-right-meta { 
+		justify-items: center; 
+		margin-top: 6px; 
+	}
+}
+
 /* Unified step header */
 .step-header {
   margin: 0 0 16px 0;
@@ -72,9 +115,138 @@ input, select, textarea {
 /* Responsive form grid */
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 
+/* Invoice form responsive styles */
+.customer-details-section {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 32px;
+	margin-bottom: 32px;
+}
+
+/* Receipt form responsive styles */
+.receipt-details-section {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 32px;
+	margin-bottom: 32px;
+}
+
+.receipt-payment-section {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 32px;
+	margin-bottom: 32px;
+}
+
+
+/* Booking form responsive styles */
+.booking-details-section {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 24px;
+}
+
+.property-details-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: 8px;
+}
+
+.contact-form-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.agent-form-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+/* Booking form section styling */
+.booking-form-section {
+	background: var(--color-white);
+	border: 1px solid var(--color-light-gray);
+	border-radius: 8px;
+	padding: 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.booking-form-content {
+	background: var(--color-pale-gray);
+	border: 1px dashed var(--color-light-gray);
+	border-radius: 6px;
+	padding: 16px;
+}
+
 /* Mobile spacing adjustments */
 @media (max-width: 640px) {
 	.container { padding: 16px; }
 	.card { padding: 16px; }
 	.button-primary, .button-secondary { width: 100%; min-width: 0; }
+	
+	/* Override flex containers for buttons on mobile */
+	.button-container { display: block !important; }
+	
+	/* Invoice form mobile styles */
+	.customer-details-section {
+		grid-template-columns: 1fr;
+		gap: 16px;
+		margin-bottom: 24px;
+	}
+	
+	/* Receipt form mobile styles */
+	.receipt-details-section {
+		grid-template-columns: 1fr;
+		gap: 16px;
+		margin-bottom: 24px;
+	}
+	
+	.receipt-payment-section {
+		grid-template-columns: 1fr;
+		gap: 16px;
+		margin-bottom: 24px;
+	}
+	
+	/* Booking form mobile styles */
+	.booking-details-section {
+		grid-template-columns: 1fr;
+		gap: 16px;
+	}
+	
+	.property-details-grid {
+		grid-template-columns: 1fr;
+		gap: 8px;
+	}
+	
+	/* Property details two-column layout mobile */
+	.property-details-two-column {
+		grid-template-columns: 1fr !important;
+		gap: 12px !important;
+	}
+	
+	.contact-form-grid {
+		grid-template-columns: 1fr;
+		gap: 8px;
+	}
+	
+	.agent-form-grid {
+		grid-template-columns: 1fr;
+		gap: 8px;
+	}
+	
+	/* Booking form mobile styles */
+	.booking-form-section {
+		padding: 16px;
+	}
+	
+	.booking-form-content {
+		padding: 12px;
+	}
+	
+	/* Ensure table has minimum width for horizontal scroll */
+	table {
+		min-width: 500px;
+	}
 }

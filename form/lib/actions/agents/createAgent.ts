@@ -16,11 +16,51 @@ export type AgentRecord = {
 
 export type AgentCreateInput = Omit<AgentRecord, "id">;
 
-export async function createAgent(data: AgentCreateInput): Promise<AgentRecord> {
+function validateAgent(data: AgentCreateInput): Record<string, string> {
+	const errors: Record<string, string> = {};
+	if (!data.first_name?.trim()) errors.first_name = "First name is required";
+	if (!data.last_name?.trim()) errors.last_name = "Last name is required";
+	
+	// Skip mobile validation if it's "N/A" (for extracted agents)
+	const mobile = data.mobile?.trim();
+	if (!mobile) {
+		errors.mobile = "Mobile number is required";
+	} else if (mobile !== "N/A") {
+		// Check if it's in E.164 format (+61...)
+		if (mobile.startsWith("+61")) {
+			const phoneDigits = mobile.replace(/\D+/g, "");
+			if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) {
+				errors.mobile = "Enter a valid Australian mobile number";
+			}
+		} else {
+			// Check if it's in local format (4xx xxx xxx or partial)
+			const phoneDigits = mobile.replace(/\D+/g, "");
+			if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) {
+				errors.mobile = "Enter a valid Australian mobile number";
+			}
+		}
+	}
+	return errors;
+}
+
+export async function createAgent(data: AgentCreateInput, skipValidation = false): Promise<AgentRecord> {
+	// Validate required fields only if not skipping validation
+	if (!skipValidation) {
+		const errors = validateAgent(data);
+		if (Object.keys(errors).length > 0) {
+			console.log("❌ [CREATE AGENT] Validation errors:", errors);
+			throw new Error(`Validation failed: ${Object.values(errors).join(", ")}`);
+		}
+	}
+
 	const first = (data.first_name || "").trim() || null;
 	const last = (data.last_name || "").trim() || null;
 	const mobileVal = (data.mobile || "").trim() || null;
 	const emailVal = (data.email || "").trim() || null;
+	
+	// Convert "N/A" values to null for extracted agents
+	const cleanMobile = mobileVal === "N/A" ? null : mobileVal;
+	const cleanEmail = emailVal === "N/A" ? null : emailVal;
 
 	function compact(obj: Record<string, unknown>): Record<string, unknown> {
 		return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== ""));
@@ -29,8 +69,8 @@ export async function createAgent(data: AgentCreateInput): Promise<AgentRecord> 
 	const payload = compact({
 		first_name: first,
 		last_name: last,
-		mobile: mobileVal,
-		email: emailVal,
+		mobile: cleanMobile,
+		email: cleanEmail,
 	});
 	const res = await postRequest<DirectusItemResponse<AgentRecord>>("/items/agents", payload);
 	return res?.data as AgentRecord;
@@ -108,7 +148,7 @@ export async function createAgentsForProperty(
 					last_name: (a.last_name || "").trim() || null,
 					mobile: (a.mobile || "").trim() || null,
 					email: email || null,
-				});
+				}, true); // Skip validation for extracted agents
 				agentToUse = created;
 				console.log("✅ [CREATE AGENTS] Successfully created new agent with ID:", agentToUse.id);
 			}

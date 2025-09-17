@@ -1,4 +1,5 @@
 import FormHeader from "@/components/ui/FormHeader";
+import NoteBox from "@/components/ui/messages/NoteBox";
 import { getRequest } from "@/lib/http/fetcher";
 import { getThankYouNote } from "@/lib/actions/globals/getGlobal";
 
@@ -29,9 +30,9 @@ export default async function StepThankYou({ searchParams }: { searchParams?: Pr
             <div className="card">
                 <FormHeader rightTitle="Thank you" rightMeta={headerMeta as any} />
                 {thankYouNote ? (
-                    <div style={{ background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 }}>
-                        <div>{thankYouNote}</div>
-                    </div>
+                    <NoteBox style={{ marginBottom: 16 }}>
+                        {thankYouNote}
+                    </NoteBox>
                 ) : null}
                 <div style={{ textAlign: "center" }}>
                     <h1 style={{ margin: 0, fontSize: 24, color: "var(--color-primary)" }}>Your Inspection has been booked</h1>

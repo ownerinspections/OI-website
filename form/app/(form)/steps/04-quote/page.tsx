@@ -12,6 +12,8 @@ import { getQuoteNote } from "@/lib/actions/globals/getGlobal";
 import { PROPOSAL_EXPIRY_DAYS } from "@/lib/env";
 import FormHeader from "@/components/ui/FormHeader";
 import { fetchGstRate } from "@/lib/actions/invoices/createInvoice";
+import { getStepUrl, getServiceType, getRouteTypeFromServiceType } from "@/lib/config/service-routing";
+import { estimateQuoteByServiceType, type PropertyDetails } from "@/lib/actions/quotes/estimateQuote";
 
 export default async function StepQuote({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -22,6 +24,13 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 	const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
 	const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
 	const paymentId = typeof params.paymentId === "string" ? params.paymentId : undefined;
+
+	if (!dealId || !contactId || !propertyId || !userId) {
+		redirect('/not-found');
+	}
+
+	// Note: Service-specific routing is now handled by the phone verification step
+	// This page is only used as a fallback for generic services or when accessed directly
 
 	// Server-side trace for debugging user linkage
 	console.log("[StepQuote] Params parsed", { userId, quoteId, dealId, contactId, propertyId, invoiceId });
@@ -67,6 +76,54 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			console.log("[StepQuote] Patched proposal user successfully");
 		} catch (err) {
 			console.warn("[StepQuote] Failed to patch proposal user", err);
+		}
+	}
+
+	// If quoteId exists in URL, call estimate API to get updated pricing
+	if (quoteId && proposal && dealId) {
+		try {
+			const deal = await getDeal(dealId);
+			const svcId = deal?.service as any;
+			const service = svcId ? await getServiceById(svcId) : null;
+			const propId = propertyId || (deal?.property ? String(deal.property) : undefined);
+			const property = propId ? await getProperty(propId) : null;
+			
+			if (service?.service_type && property) {
+				const propertyDetails: PropertyDetails = {
+					property_category: (property?.property_category as any) || "residential",
+					bedrooms: (property as any)?.number_of_bedrooms || 0,
+					bathrooms: (property as any)?.number_of_bathrooms || 0,
+					levels: (property as any)?.number_of_levels || 0,
+					basement: Boolean((property as any)?.basement),
+					stages: (property as any)?.stages || [],
+					area_sq: (property as any)?.area_sq || 0,
+					estimated_damage_loss: (property as any)?.estimated_damage_loss || 0,
+				};
+				
+				console.log("[StepQuote] Calling estimate API for existing quote", { quoteId, serviceType: service.service_type });
+				const estimate = await estimateQuoteByServiceType(service.service_type, propertyDetails);
+				
+				if (estimate && estimate.quote_price > 0) {
+					// For existing quotes, we don't update the proposal amount as QuotesForm handles addon calculations
+					// We only update the note if provided
+					if (estimate.note) {
+						console.log("[StepQuote] Updating proposal note with new estimate", { quoteId, note: estimate.note });
+						try {
+							await patchRequest(`/items/os_proposals/${encodeURIComponent(String(quoteId))}`, { note: estimate.note });
+							console.log("[StepQuote] Proposal note updated successfully");
+							proposal.note = estimate.note;
+						} catch (updateError) {
+							console.warn("[StepQuote] Failed to update proposal note:", updateError);
+						}
+					}
+					
+					// Store the base estimate for QuotesForm to use in calculations
+					// The QuotesForm component will handle addon calculations dynamically
+					console.log("[StepQuote] Base estimate received", { quoteId, baseAmount: estimate.quote_price });
+				}
+			}
+		} catch (error) {
+			console.warn("[StepQuote] Failed to estimate quote for existing proposal:", error);
 		}
 	}
 
@@ -151,6 +208,15 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		}
 	}
 
+	// If we have a proposal, also check for addons on the proposal itself
+	if (proposal && Array.isArray((proposal as any)?.addons)) {
+		const proposalAddonIds = ((proposal as any).addons as any[])
+			.map((x) => Number(x))
+			.filter((n) => Number.isFinite(n));
+		// Merge proposal addons with deal addons (proposal takes precedence)
+		preselectedAddonIds = [...new Set([...preselectedAddonIds, ...proposalAddonIds])];
+	}
+
 	// Fetch service addons (ids) then resolve addon details (name, price)
 	let addons: Array<{ id: number; name: string; price: number }> = [];
 	if (serviceId) {
@@ -170,6 +236,16 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			// ignore addons on failure
 		}
 	}
+
+	// Debug logging for addon loading
+	console.log("[StepQuote] Addon loading debug", {
+		serviceId,
+		addonsCount: addons.length,
+		preselectedAddonIds,
+		dealId,
+		quoteId,
+		hasProposal: !!proposal
+	});
 
 	// Resolve property termite risk (from query param or deal property)
 	let termiteRisk: string | undefined = undefined;
@@ -234,7 +310,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						{ label: "Expiry Date", value: expiryDateFmt },
 					]}
 				/>
-				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} paymentId={paymentId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} gstRate={gstRate} />
+				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} paymentId={paymentId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} gstRate={gstRate} proposalStatus={statusRaw} />
 			</div>
 		</div>
 	);

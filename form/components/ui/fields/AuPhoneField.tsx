@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { VALIDATION_MESSAGES, VALIDATION_PATTERNS } from "@/lib/validation/constants";
 
 type AuPhoneFieldProps = {
 	name: string;
@@ -12,7 +13,20 @@ type AuPhoneFieldProps = {
 	readOnly?: boolean;
 };
 
+function validatePhoneField(normalizedValue: string, required?: boolean): string | undefined {
+	if (required && !normalizedValue?.trim()) {
+		return VALIDATION_MESSAGES.REQUIRED;
+	}
+	if (normalizedValue && !VALIDATION_PATTERNS.PHONE.test(normalizedValue)) {
+		return VALIDATION_MESSAGES.INVALID_PHONE;
+	}
+	return undefined;
+}
+
 export default function AuPhoneField({ name, label = "Phone", defaultValue, error, required, disabled, readOnly }: AuPhoneFieldProps) {
+	const [clientError, setClientError] = useState<string | undefined>();
+	const [hasInteracted, setHasInteracted] = useState(false);
+
 	function formatLocal(digits: string): string {
 		const nine = digits.slice(0, 9);
 		const parts = [nine.slice(0, 3), nine.slice(3, 6), nine.slice(6, 9)].filter(Boolean);
@@ -37,10 +51,14 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 	const [localNumber, setLocalNumber] = useState(initialLocal);
 
 	function onChange(e: React.ChangeEvent<HTMLInputElement>) {
+		setHasInteracted(true);
 		const digitsOnly = e.target.value.replace(/\D+/g, "");
 		let next = digitsOnly;
 		if (next.length === 0) {
 			setLocalNumber("");
+			// Validate empty value only after user interaction
+			const validationError = validatePhoneField("", required);
+			setClientError(validationError);
 			return;
 		}
 		if (next[0] !== "4") {
@@ -55,8 +73,20 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 		if (digitsOnly.length === 9 && digitsOnly.startsWith("4")) {
 			return "+61" + digitsOnly;
 		}
-		return "";
+		// Return the local number if it has content but is incomplete, so server can show format error
+		return localNumber.trim() ? localNumber : "";
 	}, [localNumber]);
+
+	// Validate when normalized value changes, but only after user interaction
+	useEffect(() => {
+		if (hasInteracted) {
+			const validationError = validatePhoneField(normalized, required);
+			setClientError(validationError);
+		}
+	}, [normalized, required, hasInteracted]);
+
+	// Show server error if present, otherwise show client validation error
+	const displayError = error || clientError;
 
 	const labelStyle: React.CSSProperties = {
 		display: "block",
@@ -68,9 +98,9 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 	const wrapperStyle: React.CSSProperties = {
 		display: "flex",
 		alignItems: "center",
-		border: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+		border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
 		borderRadius: 6,
-		background: "var(--color-white)",
+		background: readOnly ? "var(--color-pale-gray)" : "var(--color-white)",
 		height: "var(--field-height)",
 		overflow: "hidden",
 		boxSizing: "border-box",
@@ -79,7 +109,7 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 	const prefixStyle: React.CSSProperties = {
 		padding: "0 12px",
 		background: "var(--color-pale-gray)",
-		borderRight: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+		borderRight: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
 		color: "var(--color-text-secondary)",
 		height: "100%",
 		display: "flex",
@@ -108,12 +138,13 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 	};
 
 	const shouldValidate = !disabled && !readOnly;
-	const pattern = shouldValidate ? "^\\d{3}\\s\\d{3}\\s\\d{3}$" : undefined;
-	const isRequired = shouldValidate && !!required;
 
 	return (
 		<div style={fieldStyle}>
-			<label htmlFor={`${name}-local`} style={labelStyle}>{label}</label>
+			<label htmlFor={`${name}-local`} style={labelStyle}>
+				{label}
+				{required && <span style={{ color: "var(--color-error)", marginLeft: 4 }}>*</span>}
+			</label>
 			<div style={wrapperStyle}>
 				<div style={prefixStyle}>+61</div>
 				<input
@@ -124,20 +155,18 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 					onChange={onChange}
 					placeholder="4xx xxx xxx"
 					inputMode="tel"
-					pattern={pattern}
 					maxLength={11}
 					autoComplete="tel-national"
 					style={inputStyle}
-					aria-invalid={error ? "true" : undefined}
-					aria-describedby={error ? `${name}-error` : undefined}
-					required={isRequired}
+					aria-invalid={displayError ? "true" : undefined}
+					aria-describedby={displayError ? `${name}-error` : undefined}
 					disabled={disabled}
 					readOnly={readOnly}
 				/>
 				{/* Hidden E.164 field that is submitted */}
 				<input type="hidden" name={name} value={normalized} />
 			</div>
-			{error ? <div id={`${name}-error`} style={errorStyle}>{error}</div> : null}
+			{displayError ? <div id={`${name}-error`} style={errorStyle}>{displayError}</div> : null}
 		</div>
 	);
 }

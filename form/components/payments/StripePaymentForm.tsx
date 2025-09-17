@@ -98,6 +98,23 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref, invoiceId,
                     {submitting ? "Processing..." : "Pay Now"}
                 </button>
             </div>
+            <div style={{ 
+                marginTop: 16, 
+                padding: 12, 
+                backgroundColor: "#f8f9fa", 
+                borderRadius: "6px", 
+                border: "1px solid #e9ecef",
+                fontSize: 12,
+                color: "#6c757d",
+                textAlign: "center"
+            }}>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: "#495057" }}>
+                    SSL Encrypted • PCI Compliant • Stripe Protected
+                </div>
+                <div>
+                    Your payment information is secure and encrypted. We never store your card details.
+                </div>
+            </div>
         </form>
     );
 }

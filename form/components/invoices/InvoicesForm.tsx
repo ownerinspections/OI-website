@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { CompanyInfo, CustomerInfo, PropertyInfo } from "@/lib/actions/invoices/createInvoice";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import FormFooter from "@/components/ui/FormFooter";
+import ErrorBox from "@/components/ui/messages/ErrorBox";
 
 type Props = {
 	invoice: {
@@ -26,6 +27,7 @@ type Props = {
 			total: number;
 		}>;
 		property?: PropertyInfo;
+		properties?: PropertyInfo[];
 	};
 	companyInfo: CompanyInfo | null;
 	customerInfo: CustomerInfo | null;
@@ -73,6 +75,26 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	
 	console.log("InvoicesForm rendered with termsLink:", termsLink, "privacyPolicyLink:", privacyPolicyLink, "termsAgreed:", termsAgreed);
+
+	const handlePayNowClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+		e.preventDefault();
+		setErrorMessage(null);
+		
+		console.log("Pay Now clicked, termsAgreed:", termsAgreed);
+		
+		// Check if terms are agreed to
+		if (!termsAgreed) {
+			console.log("Terms not agreed, showing error");
+			setErrorMessage("You must agree to the Terms and Conditions and Privacy Policy to proceed with payment.");
+			return;
+		}
+		
+		console.log("Terms agreed, proceeding with payment");
+		// If terms are agreed, proceed with the payment action
+		if (payNowAction) {
+			await payNowAction();
+		}
+	};
 	const headerStyle: React.CSSProperties = { 
 		display: "flex", 
 		justifyContent: "space-between", 
@@ -93,6 +115,12 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 		gap: 32, 
 		marginBottom: 32 
 	};
+	const sectionStyleMobile: React.CSSProperties = { 
+		display: "grid", 
+		gridTemplateColumns: "1fr", 
+		gap: 16, 
+		marginBottom: 24 
+	};
 	const customerStyle: React.CSSProperties = { 
 		background: "var(--color-pale-gray)", 
 		padding: 16, 
@@ -101,6 +129,10 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 	const tableStyle: React.CSSProperties = { 
 		width: "100%", 
 		borderCollapse: "collapse", 
+		marginBottom: 24 
+	};
+	const tableWrapperStyle: React.CSSProperties = { 
+		overflowX: "auto", 
 		marginBottom: 24 
 	};
 	const thStyle: React.CSSProperties = { 
@@ -130,30 +162,10 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 	const actionsStyle: React.CSSProperties = { 
 		display: "flex", 
 		justifyContent: "space-between", 
-		marginTop: 32,
-		paddingTop: 16,
-		borderTop: "1px solid var(--color-light-gray)"
+		marginTop: 16,
+		gap: 8
 	};
 
-	const handlePayNow = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setErrorMessage(null);
-		
-		console.log("Pay Now clicked, termsAgreed:", termsAgreed);
-		
-		// Check if terms are agreed to
-		if (!termsAgreed) {
-			console.log("Terms not agreed, showing error");
-			setErrorMessage("You must agree to the Terms and Conditions and Privacy Policy to proceed with payment.");
-			return;
-		}
-		
-		console.log("Terms agreed, proceeding with payment");
-		// If terms are agreed, proceed with the payment action
-		if (payNowAction) {
-			await payNowAction();
-		}
-	};
 
 	return (
 		<div>
@@ -166,7 +178,7 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 			</div>
 
 			{/* Customer Details */}
-			<div style={sectionStyle}>
+			<div className="customer-details-section">
 				<div style={customerStyle}>
 					<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Bill To:</h3>
 					{customerInfo ? (
@@ -182,9 +194,37 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 						<div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Customer information not available</div>
 					)}
 				</div>
-				<div style={customerStyle}>
-					<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
-					{invoice.property ? (
+{invoice.properties && invoice.properties.length > 0 ? (
+					invoice.properties.map((property, index) => (
+						<div key={index} style={customerStyle}>
+							<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>
+								{invoice.properties!.length > 1 ? `Property ${index + 1} Details:` : 'Property Details:'}
+							</h3>
+							<div style={{ lineHeight: 1.5 }}>
+								{/* Full Address */}
+								<div style={{ marginBottom: 8 }}>
+									{(() => {
+										const addressParts = [];
+										if (property.street_address) addressParts.push(property.street_address);
+										if (property.suburb) addressParts.push(property.suburb);
+										if (property.state) addressParts.push(property.state);
+										if (property.post_code) addressParts.push(property.post_code);
+										return addressParts.join(', ');
+									})()}
+								</div>
+								{/* Property Details */}
+								{property.property_category && <div>Category: {property.property_category}</div>}
+								{property.property_type && <div>Type: {property.property_type}</div>}
+								{property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
+								{property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
+								{property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
+								{property.basement && <div>Basement: Yes</div>}
+							</div>
+						</div>
+					))
+				) : invoice.property ? (
+					<div style={customerStyle}>
+						<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
 						<div style={{ lineHeight: 1.5 }}>
 							{/* Full Address */}
 							<div style={{ marginBottom: 8 }}>
@@ -198,48 +238,52 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 								})()}
 							</div>
 							{/* Property Details */}
-							{invoice.property.property_type && <div>Type: {invoice.property.property_type}</div>}
 							{invoice.property.property_category && <div>Category: {invoice.property.property_category}</div>}
+							{invoice.property.property_type && <div>Type: {invoice.property.property_type}</div>}
 							{invoice.property.number_of_bedrooms && <div>Bedrooms: {invoice.property.number_of_bedrooms}</div>}
 							{invoice.property.number_of_bathrooms && <div>Bathrooms: {invoice.property.number_of_bathrooms}</div>}
 							{invoice.property.number_of_levels && <div>Levels: {invoice.property.number_of_levels}</div>}
 							{invoice.property.basement && <div>Basement: Yes</div>}
-							{invoice.property.termite_risk && <div>Termite Risk: {invoice.property.termite_risk}</div>}
 						</div>
-					) : (
+					</div>
+				) : (
+					<div style={customerStyle}>
+						<h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
 						<div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
-					)}
-				</div>
+					</div>
+				)}
 			</div>
 
 			{/* Line Items */}
-			<table style={tableStyle}>
-				<thead>
-					<tr>
-						<th style={thStyle}>Description</th>
-						<th style={{ ...thStyle, textAlign: "center" }}>Qty</th>
-						<th style={{ ...thStyle, textAlign: "right" }}>Unit Price</th>
-						<th style={{ ...thStyle, textAlign: "right" }}>Total</th>
-					</tr>
-				</thead>
-				<tbody>
-					{invoice.line_items.map((item, index) => (
-						<tr key={index}>
-							<td style={tdStyle}>
-								<div style={{ fontWeight: 600 }}>{item.name}</div>
-								{item.description && <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{item.description}</div>}
-							</td>
-							<td style={{ ...tdStyle, textAlign: "center" }}>{item.quantity}</td>
-							<td style={{ ...tdStyle, textAlign: "right" }}>
-								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.unit_price)}
-							</td>
-							<td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>
-								{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.total)}
-							</td>
+			<div style={tableWrapperStyle}>
+				<table style={tableStyle}>
+					<thead>
+						<tr>
+							<th style={thStyle}>Description</th>
+							<th style={{ ...thStyle, textAlign: "center" }}>Qty</th>
+							<th style={{ ...thStyle, textAlign: "right" }}>Unit Price</th>
+							<th style={{ ...thStyle, textAlign: "right" }}>Total</th>
 						</tr>
-					))}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{invoice.line_items.map((item, index) => (
+							<tr key={index}>
+								<td style={tdStyle}>
+									<div style={{ fontWeight: 600 }}>{item.name}</div>
+									{item.description && <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{item.description}</div>}
+								</td>
+								<td style={{ ...tdStyle, textAlign: "center" }}>{item.quantity}</td>
+								<td style={{ ...tdStyle, textAlign: "right" }}>
+									{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.unit_price)}
+								</td>
+								<td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>
+									{new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(item.total)}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 
 			{/* Totals */}
 			<div style={totalsStyle}>
@@ -271,35 +315,27 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 
 			{/* Error Message */}
 			{errorMessage && (
-				<div style={{ 
-					color: "var(--color-error)", 
-					fontSize: 14, 
-					marginTop: 8,
-					padding: 8,
-					background: "#fef2f2",
-					border: "1px solid #fecaca",
-					borderRadius: 4
-				}}>
+				<ErrorBox style={{ marginTop: 8 }}>
 					{errorMessage}
-				</div>
+				</ErrorBox>
 			)}
 
 			{/* Actions */}
-			<div style={actionsStyle}>
-				{!isPaid && prevHref && <PreviousButton href={prevHref} />}
-				{!isPaid && (payNowAction ? (
-					<form onSubmit={handlePayNow}>
+			{!isPaid && (
+				<div style={actionsStyle}>
+					{prevHref && <PreviousButton href={prevHref} />}
+					{payNowAction ? (
 						<button 
-							type="submit" 
 							className="button-primary"
+							onClick={handlePayNowClick}
 						>
 							Pay Now
 						</button>
-					</form>
-				) : nextHref ? (
-					<a className="button-primary" href={nextHref}>Pay Now</a>
-				) : null)}
-			</div>
+					) : nextHref ? (
+						<a className="button-primary" href={nextHref}>Pay Now</a>
+					) : null}
+				</div>
+			)}
 		</div>
 	);
 }

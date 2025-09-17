@@ -40,6 +40,9 @@ export const FORM_COOKIE_DOMAIN = process.env.FORM_COOKIE_DOMAIN ?? "";
 // Redis (removed)
 // Dashboard app base URL (Next.js app). Used for redirects like "Book Now".
 export const APP_DASHBOARD_URL = process.env.APP_DASHBOARD_URL ?? "http://localhost:8040";
+// Website URLs for navigation
+export const HOME_WEBSITE_URL = process.env.HOME_WEBSITE_URL ?? "https://ownerinspections.com.au";
+export const FORM_WEBSITE_URL = process.env.FORM_WEBSITE_URL ?? "https://form.owner-inspections.com.au";
 
 // Payment failure reasons (static defaults)
 export const FAILED_REASON_REQUIRES_CONFIRMATION = process.env.FAILED_REASON_REQUIRES_CONFIRMATION ?? "Payment method attached, needs confirmation";

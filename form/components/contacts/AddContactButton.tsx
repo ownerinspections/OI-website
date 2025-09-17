@@ -21,43 +21,53 @@ export default function AddContactButton({ onContactAdded }: AddContactButtonPro
         setContactCount(prev => prev - 1);
     };
 
+    const handleRemoveContact = (index: number) => () => {
+        removeContact(index);
+    };
+
+
     return (
         <div>
-            <div>
-                {Array.from({ length: contactCount }, (_, index) => (
-                    <div key={index} style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
-                            <TextField name={`new_contact_${index + 2}_first_name`} label="First name" />
-                            <TextField name={`new_contact_${index + 2}_last_name`} label="Last name" />
+            {contactCount > 0 && (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {Array.from({ length: contactCount }, (_, index) => (
+                        <div key={index} style={{ position: "relative", display: "grid", gap: 8, padding: 12, border: "1px dashed var(--color-light-gray)", borderRadius: 6, backgroundColor: "var(--color-pale-gray)" }}>
                             <button 
                                 type="button" 
-                                onClick={() => removeContact(index)}
+                                onClick={handleRemoveContact(index)}
                                 style={{
-                                    height: "var(--field-height)",
-                                    width: "var(--field-height)",
+                                    position: "absolute",
+                                    top: 8,
+                                    right: 8,
+                                    width: "20px",
+                                    height: "20px",
                                     backgroundColor: "transparent",
                                     color: "var(--color-text-muted)",
-                                    border: "1px solid var(--color-light-gray)",
-                                    borderRadius: "6px",
+                                    border: "none",
+                                    borderRadius: "50%",
                                     cursor: "pointer",
-                                    fontSize: "16px",
+                                    fontSize: "14px",
                                     fontWeight: "400",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    marginBottom: "16px"
+                                    zIndex: 1
                                 }}
                             >
                                 ×
                             </button>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                <TextField name={`new_contact_${index + 2}_first_name`} label="First name" required />
+                                <TextField name={`new_contact_${index + 2}_last_name`} label="Last name" required />
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                <EmailField name={`new_contact_${index + 2}_email`} label="Email" required />
+                                <AuPhoneField name={`new_contact_${index + 2}_phone`} label="Mobile" required />
+                            </div>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                            <AuPhoneField name={`new_contact_${index + 2}_phone`} label="Mobile" />
-                            <EmailField name={`new_contact_${index + 2}_email`} label="Email" />
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
             <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 8 }}>
                 <button 
                     type="button" 
@@ -73,7 +83,7 @@ export default function AddContactButton({ onContactAdded }: AddContactButtonPro
                         fontWeight: "500"
                     }}
                 >
-                    + Add Contact
+                    + Add more contacts to this booking
                 </button>
             </div>
         </div>

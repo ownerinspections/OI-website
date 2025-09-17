@@ -4,6 +4,9 @@ import { createPaymentIntent } from "@/lib/actions/payments/stripe/createPayment
 import { APP_BASE_URL, STRIPE_PUBLISHABLE_KEY, DEAL_STAGE_PAYMENT_SUBMITTED_ID } from "@/lib/env";
 import FormHeader from "@/components/ui/FormHeader";
 import { getPaymentNote } from "@/lib/actions/globals/getGlobal";
+import NoteBox from "@/components/ui/messages/NoteBox";
+import SuccessBox from "@/components/ui/messages/SuccessBox";
+import { redirect } from "next/navigation";
 
 export default async function StepPayment({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -16,7 +19,7 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 	const userId = typeof params.userId === "string" ? params.userId : undefined;
 
 	if (!invoiceId) {
-		return <div className="container"><div className="card">Missing invoice</div></div>;
+		redirect('/not-found');
 	}
 
 	let invoice: any = null;
@@ -27,7 +30,7 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 	} catch {}
 
 	if (!invoice) {
-		return <div className="container"><div className="card">Invoice not found</div></div>;
+		redirect('/not-found');
 	}
 
 	// Resolve amount to charge, robust to string values or missing totals
@@ -51,7 +54,7 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 	}
 	try { console.log("[payment][step6] Using amount", { amountTotal, invoiceTotal: invoice?.total, amount_due: invoice?.amount_due, subtotal: invoice?.subtotal }); } catch {}
 	if (!Number.isFinite(amountTotal) || amountTotal <= 0) {
-		return <div className="container"><div className="card">Invalid invoice amount</div></div>;
+		redirect('/not-found');
 	}
 
 	// Use same id for payment_id as invoice_id if available; otherwise derive deterministically from numeric invoice id
@@ -152,7 +155,7 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 
 	const clientSecret = (pi as any)?.client_secret || "";
 	if (!clientSecret) {
-		return <div className="container"><div className="card">Failed to initialize payment</div></div>;
+		redirect('/not-found');
 	}
 
 	const base = (APP_BASE_URL || "").trim() || "http://localhost:8030";
@@ -222,9 +225,9 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 					]}
 				/>
 				{paymentNote ? (
-					<div style={{ background: "var(--color-pale-gray)", borderRadius: 6, padding: 12, marginBottom: 16 }}>
-						<div>{paymentNote}</div>
-					</div>
+					<NoteBox style={{ marginBottom: 16 }}>
+						{paymentNote}
+					</NoteBox>
 				) : null}
 				
 				{/* Payment Amount Display */}
@@ -240,17 +243,14 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 				
 				{isPaid ? (
 					/* Payment Already Completed */
-					<div style={{ 
-						background: "var(--color-success)", 
-						color: "white", 
-						borderRadius: 6, 
-						padding: 16, 
+					<SuccessBox style={{ 
 						textAlign: "center",
 						fontSize: "16px",
-						fontWeight: "600"
+						fontWeight: "600",
+						padding: 16
 					}}>
 						Payment Completed Successfully
-					</div>
+					</SuccessBox>
 				) : (
 					/* Payment Form */
 					<StripePaymentForm clientSecret={clientSecret} invoiceId={String(invoiceId)} receiptHref={receiptHref} publishableKey={STRIPE_PUBLISHABLE_KEY} returnUrl={returnUrl} prevHref={prevHref} paymentId={directusPaymentId || ""} />

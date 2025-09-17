@@ -11,7 +11,7 @@ export default function FormFooter({ termsLink, privacyPolicyLink, onAgreementCh
 	}, [agreed, onAgreementChange]);
 
 	return (
-		<div style={{ borderTop: "1px solid var(--color-light-gray)", marginTop: 16, paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+		<div style={{ marginTop: 16, paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
 			<input
 				id="agree-terms"
 				type="checkbox"

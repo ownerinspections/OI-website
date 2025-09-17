@@ -1,5 +1,8 @@
-import React, { forwardRef, useId } from "react";
+"use client";
+
+import React, { forwardRef, useId, useState } from "react";
 import type { SelectHTMLAttributes } from "react";
+import { VALIDATION_MESSAGES } from "@/lib/validation/constants";
 
 type Option = {
   value: string;
@@ -17,7 +20,16 @@ type SelectFieldProps = {
   placeholder?: string;
   error?: string;
   hint?: string;
+  required?: boolean;
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>;
 } & Omit<SelectHTMLAttributes<HTMLSelectElement>, "name" | "defaultValue" | "children">;
+
+function validateSelectField(value: string, required?: boolean): string | undefined {
+  if (required && !value?.trim()) {
+    return VALIDATION_MESSAGES.SELECT_OPTION;
+  }
+  return undefined;
+}
 
 const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField(
   {
@@ -37,11 +49,22 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
   },
   ref
 ) {
+  const [clientError, setClientError] = useState<string | undefined>();
   const reactId = useId();
   const fieldId = id ?? `${name}-${reactId}`;
   const errorId = error ? `${fieldId}-error` : undefined;
   const hintId = hint ? `${fieldId}-hint` : undefined;
   const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const fieldValue = e.target.value;
+    const validationError = validateSelectField(fieldValue, required);
+    setClientError(validationError);
+    onChange?.(e);
+  };
+
+  // Show server error if present, otherwise show client validation error
+  const displayError = error || clientError;
 
   const fieldStyle: React.CSSProperties = {
     marginBottom: 16,
@@ -63,7 +86,7 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
     height: "var(--field-height)",
     lineHeight: "calc(var(--field-height) - 2px)",
     borderRadius: 6,
-    border: `1px solid ${error ? "var(--color-error)" : "var(--color-light-gray)"}`,
+    border: `1px solid ${displayError ? "var(--color-error)" : "var(--color-light-gray)"}`,
     padding: "0 36px 0 12px",
     color: disabled ? "var(--color-text-muted)" : "var(--color-text-primary)",
     background: "var(--color-white)",
@@ -96,7 +119,10 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
 
   return (
     <div style={fieldStyle}>
-      <label htmlFor={fieldId} style={labelStyle}>{label}</label>
+      <label htmlFor={fieldId} style={labelStyle}>
+        {label}
+        {required && <span style={{ color: "var(--color-error)", marginLeft: 4 }}>*</span>}
+      </label>
       <div style={selectWrapperStyle}>
         <select
           id={fieldId}
@@ -104,16 +130,15 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
           ref={ref}
           value={value}
           defaultValue={value === undefined ? defaultValue : undefined}
-          onChange={onChange}
+          onChange={handleChange}
           disabled={disabled}
-          required={required}
-          aria-invalid={!!error}
+          aria-invalid={!!displayError}
           aria-describedby={describedBy}
           style={selectStyle}
           {...rest}
         >
           {placeholder ? (
-            <option value="" disabled={required} hidden={required}>
+            <option value="" disabled hidden>
               {placeholder}
             </option>
           ) : null}
@@ -128,7 +153,7 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
         </svg>
       </div>
       {hint ? <div id={hintId} style={hintStyle}>{hint}</div> : null}
-      {error ? <div id={errorId} style={errorStyle}>{error}</div> : null}
+      {displayError ? <div id={errorId} style={errorStyle}>{displayError}</div> : null}
     </div>
   );
 });

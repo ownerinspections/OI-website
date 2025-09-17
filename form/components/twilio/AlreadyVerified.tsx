@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import SuccessBox from "@/components/ui/messages/SuccessBox";
 
 type Props = { to: string; seconds?: number };
 
@@ -27,26 +28,12 @@ export default function AlreadyVerified({ to, seconds = 3 }: Props) {
 		return () => clearInterval(id);
 	}, [to, remaining]);
 
-	const successRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #10b981",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
 
 	return (
 		<>
-			<div style={successRowStyle} aria-live="polite">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#10b981" }}>
-					<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-				</svg>
-				<span>Your phone is already verified. Redirecting to your quote in {remaining}s…</span>
-			</div>
+			<SuccessBox aria-live="polite">
+				Your phone is already verified. Redirecting to your quote in {remaining}s…
+			</SuccessBox>
 			<p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 8 }}>
 				If you are not redirected, <a href={to}>continue to your quote</a>.
 			</p>

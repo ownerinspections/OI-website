@@ -14,12 +14,19 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 		// Update proposal total amount in Directus (os_proposals/quote_amount)
 		await patchRequest(`/items/os_proposals/${encodeURIComponent(String(id))}`, { quote_amount: total });
 
-		// Also update the related deal with selected addons if provided
+		// Also update the related deal with selected addons and stages if provided
 		const addons: number[] | undefined = Array.isArray(body?.addons)
 			? body.addons
 				.map((x: unknown) => Number(x as any))
 				.filter((n: number) => Number.isFinite(n))
 			: undefined;
+		
+		const stages: number[] | undefined = Array.isArray(body?.stages)
+			? body.stages
+				.map((x: unknown) => Number(x as any))
+				.filter((n: number) => Number.isFinite(n))
+			: undefined;
+
 		if (addons && addons.length > 0) {
 			// Find proposal to get deal id
 			try {
@@ -30,6 +37,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 				}
 			} catch {}
 		}
+
+		// Note: stages field doesn't exist in os_deals table, so we skip updating it
+		// The stages are handled in the frontend state and don't need to be persisted to the deal
 
 		return NextResponse.json({ success: true });
 	} catch (e) {

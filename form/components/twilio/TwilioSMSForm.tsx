@@ -3,17 +3,22 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
-import TextField from "@/components/ui/fields/TextField";
+import TextFieldNoAutocomplete from "@/components/ui/fields/TextFieldNoAutocomplete";
 import { submitUpdatePhone } from "@/lib/actions/contacts/submitUpdatePhone";
 import { submitSendVerificationCode } from "@/lib/actions/twilio/sendVerificationCode";
 import { submitVerifyCode } from "@/lib/actions/twilio/verifyCode";
 import AlreadyVerified from "@/components/twilio/AlreadyVerified";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import NextButton from "@/components/ui/controls/NextButton";
+import InfoBox from "@/components/ui/messages/InfoBox";
+import SuccessBox from "@/components/ui/messages/SuccessBox";
+import ErrorBox from "@/components/ui/messages/ErrorBox";
+import WarningBox from "@/components/ui/messages/WarningBox";
+import { getStepUrl, getRouteTypeFromServiceType } from "@/lib/config/service-routing";
 
-type Props = { phone?: string; contactId?: string; dealId?: string; propertyId?: string; quoteId?: string; userId?: string; redirectSeconds?: number };
+type Props = { phone?: string; contactId?: string; dealId?: string; propertyId?: string; quoteId?: string; userId?: string; redirectSeconds?: number; serviceType?: string };
 
-export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, quoteId, userId, redirectSeconds = 3 }: Props) {
+export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, quoteId, userId, redirectSeconds = 3, serviceType }: Props) {
 	const router = useRouter();
 	const [isEditing, setIsEditing] = useState<boolean>(false);
 	const [currentPhone, setCurrentPhone] = useState<string | undefined>(phone);
@@ -70,52 +75,6 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 	const infoStyle: React.CSSProperties = { color: "var(--color-info)", fontSize: 12, marginBottom: 8 };
 	const sandboxStyle: React.CSSProperties = { color: "var(--color-dark-gray)", fontSize: 12, marginTop: 4 };
 
-	// Message row styles aligned with property page
-	const infoRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #3b82f6",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-	const successRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #10b981",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginTop: 8,
-		marginBottom: 4,
-	};
-	const errorRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #ef4444",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-	const warningRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #f59e0b",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
 
 	const [updateState, updateAction] = useActionState(submitUpdatePhone, {} as any);
 	const [sendState, sendAction] = useActionState(submitSendVerificationCode, {} as any);
@@ -217,10 +176,21 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 			}
 			if (nextObj && nextObj.quoteId) params.set("quoteId", String(nextObj.quoteId));
 			else if (quoteId) params.set("quoteId", String(quoteId));
-			const url = `/steps/04-quote?${params.toString()}`;
+			
+			// Determine the service-specific quote page to redirect to
+			let quoteUrl = "/steps/04-quote"; // fallback to generic quote page
+			if (serviceType) {
+				const routeType = getRouteTypeFromServiceType(serviceType);
+				if (routeType !== "generic") {
+					quoteUrl = getStepUrl(4, routeType);
+				}
+				params.set("serviceType", serviceType);
+			}
+			
+			const url = `${quoteUrl}?${params.toString()}`;
 			setVerifiedTo(url);
 		}
-	}, [verifyState, dealId, contactId, propertyId, quoteId, userId, router]);
+	}, [verifyState, dealId, contactId, propertyId, quoteId, userId, router, serviceType]);
 
 	function formatDisplayPhone(e164?: string): string {
 		if (!e164) return "-";
@@ -280,6 +250,41 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 		console.log("[verify] button clicked");
 	}
 
+	// Button click handlers
+	function handleChangeNumberClick() {
+		console.log("[change number] clicked");
+		setIsEditing(true);
+		setUpdateSuccess(undefined);
+		setSendError(undefined);
+		setSendGateError("");
+	}
+
+	function handleVerifyAndSendClick(e: React.MouseEvent<HTMLButtonElement>) {
+		if (!currentPhone) {
+			e.preventDefault();
+			setSendGateError("Please verify your phone");
+		} else {
+			setSendGateError("");
+			handleSendClick();
+		}
+	}
+
+	function handleBackToPhoneClick() {
+		setIsCodeSent(false);
+		setCodeError(undefined);
+	}
+
+	function handleCancelEditClick() {
+		console.log("[cancel edit] clicked");
+		setIsEditing(false);
+		setPhoneError(undefined);
+	}
+
+	function handleVerifyPhoneClick(e: React.MouseEvent<HTMLButtonElement>) {
+		e.preventDefault();
+		setSendGateError("Please verify your phone");
+	}
+
  
 
 	if (verifiedTo) {
@@ -307,42 +312,29 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 							<input type="hidden" name="user_id" value={userId ?? ""} />
 
 							<div style={{ ...actionsStyle }}>
-								<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={() => { console.log("[change number] clicked"); setIsEditing(true); setUpdateSuccess(undefined); setSendError(undefined); setSendGateError(""); }}>Change number</button>
-								<button className="button-primary button-primary--outlined" type="submit" onClick={(e) => { if (!currentPhone) { e.preventDefault(); setSendGateError("Please verify your phone"); } else { setSendGateError(""); handleSendClick(); } }} style={{ width: "50%" }}>Verify & send code</button>
+								<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={handleChangeNumberClick}>Change number</button>
+								<button className="button-primary button-primary--outlined" type="submit" onClick={handleVerifyAndSendClick} style={{ width: "50%" }}>Verify & send code</button>
 							</div>
 							{updateSuccess ? (
-								<div style={{ ...successRowStyle, marginTop: 12 }}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#10b981" }}>
-										<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-									</svg>
-									<span>{updateSuccess}</span>
-								</div>
+								<SuccessBox style={{ marginTop: 12 }}>
+									{updateSuccess}
+								</SuccessBox>
 							) : null}
 							{sendError ? (
-								<div style={{ ...errorRowStyle, marginTop: 12 }}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#ef4444" }}>
-										<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-										<circle cx="12" cy="16" r="1" fill="currentColor" />
-										<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-									</svg>
-									<span>{sendError}</span>
-								</div>
+								<ErrorBox style={{ marginTop: 12 }}>
+									{sendError}
+								</ErrorBox>
 							) : null}
 							{sendGateError ? (
-								<div style={{ ...errorRowStyle, marginTop: 12 }}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#ef4444" }}>
-										<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-										<circle cx="12" cy="16" r="1" fill="currentColor" />
-										<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-									</svg>
-									<span>{sendGateError}</span>
-								</div>
+								<ErrorBox style={{ marginTop: 12 }}>
+									{sendGateError}
+								</ErrorBox>
 							) : null}
 						</form>
 					) : (
 						<form id="verify-code-form" action={verifyAction} onSubmit={handleVerifySubmit} noValidate style={{ width: "100%", maxWidth: 420, textAlign: "left", margin: "0 auto" }}>
 							{/* Code input replaces phone field */}
-							<TextField name="code" label="Verification code" placeholder="Enter code" inputMode="numeric" pattern="^\\d{4,8}$" maxLength={8} error={codeError} value={codeInput} onChange={(e) => setCodeInput(e.currentTarget.value)} />
+							<TextFieldNoAutocomplete name="code" label="Verification code" placeholder="Enter code" inputMode="numeric" pattern="^\\d{4,8}$" maxLength={8} error={codeError} value={codeInput} onChange={(e) => setCodeInput(e.currentTarget.value)} required />
 							{/* Hidden inputs for actions */}
 							<input type="hidden" name="phone" value={currentPhone ?? ""} />
 							<input type="hidden" name="phone_local" value={formatLocalFromE164(currentPhone)} />
@@ -354,7 +346,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 							{/* Info and expiry moved below actions to align with send error position */}
 
 							<div style={{ ...actionsStyle }}>
-								<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={() => { setIsCodeSent(false); setCodeError(undefined); }}>Back to phone</button>
+								<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={handleBackToPhoneClick}>Back to phone</button>
 								{codeExpired ? (
 									<button className="button-primary button-primary--outlined" type="submit" formNoValidate formAction={sendAction as any} onClick={handleResendClick} style={{ width: "50%" }}>Resend code</button>
 								) : (
@@ -364,28 +356,17 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 							{/* Info and expiry placed under the buttons */}
 							{isCodeSent && (
 								remainingSeconds > 0 ? (
-									<div style={{ ...infoRowStyle, marginTop: 12 }}>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#3b82f6" }}>
-											<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.4" />
-										</svg>
-										<span>Verification code expires in {remainingSeconds}s</span>
-									</div>
+									<InfoBox style={{ marginTop: 12 }}>
+										Verification code expires in {remainingSeconds}s
+									</InfoBox>
 								) : codeExpired ? (
-									<div style={{ ...warningRowStyle, marginTop: 12 }}>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#f59e0b" }}>
-											<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-											<circle cx="12" cy="16" r="1" fill="currentColor" />
-											<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-										</svg>
-										<span>Code has expired. Please request a new one.</span>
-									</div>
+									<WarningBox style={{ marginTop: 12 }}>
+										Code has expired. Please request a new one.
+									</WarningBox>
 								) : (
-									<div style={{ ...infoRowStyle, marginTop: 12 }}>
-										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#3b82f6" }}>
-											<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.4" />
-										</svg>
-										<span>Verification code sent</span>
-									</div>
+									<InfoBox style={{ marginTop: 12 }}>
+										Verification code sent
+									</InfoBox>
 								)
 							)}
 							{/* Footer moved outside to keep consistent positioning */}
@@ -396,7 +377,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 						<input type="hidden" name="contact_id" value={contactId ?? ""} />
 						<AuPhoneField name="phone" label="New Phone Number" defaultValue={currentPhone} required error={phoneError} />
 						<div style={{ ...actionsStyle }}>
-							<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={() => { console.log("[cancel edit] clicked"); setIsEditing(false); setPhoneError(undefined); }}>Cancel</button>
+							<button className="button-secondary button-secondary--outlined" type="button" style={{ width: "50%" }} onClick={handleCancelEditClick}>Cancel</button>
 							<button className="button-primary button-primary--outlined" type="submit" style={{ width: "50%" }}>Update number</button>
 						</div>
 					</form>
@@ -406,7 +387,7 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 				{isCodeSent ? (
 					<NextButton label="Verify phone" form="verify-code-form" />
 				) : (
-					<NextButton label="Verify phone" form="verify-code-form" onClick={(e) => { e.preventDefault(); setSendGateError("Please verify your phone"); }} />
+					<NextButton label="Verify phone" form="verify-code-form" onClick={handleVerifyPhoneClick} />
 				)}
 			</div>
 		</>

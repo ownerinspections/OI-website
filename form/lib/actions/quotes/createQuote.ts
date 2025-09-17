@@ -2,6 +2,7 @@
 
 import { getRequest, postRequest, patchRequest } from "@/lib/http/fetcher";
 import { APP_BASE_URL, PROPOSAL_EXPIRY_DAYS, PROPOSAL_NAME, PROPOSAL_STATUS, DEAL_STAGE_QUOTE_SUBMITTED_ID } from "@/lib/env";
+import { getStepUrl, getServiceType } from "@/lib/config/service-routing";
 
 type DirectusItemResponse<T> = { data: T };
 
@@ -119,13 +120,28 @@ export async function createProposal(params: {
 			const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
 			return `${protocol}://${host}${port ? `:${port}` : ""}`.replace(/\/$/, "");
 		})();
+		
+		// Get service type for service-specific routing
+		let serviceType = "generic";
+		try {
+			const dealRes = await getRequest<{ data: { service?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(params.dealId))}?fields=service`);
+			if (dealRes?.data?.service) {
+				serviceType = getServiceType(Number(dealRes.data.service));
+			}
+		} catch (e) {
+			console.warn("[createProposal] Failed to get service type for routing", e);
+		}
+		
 		const urlParams = new URLSearchParams();
 		// Standard order for step 4 links: contactId, dealId, propertyId, quoteId
 		if (params.contactId !== undefined) urlParams.set("contactId", String(params.contactId));
 		if (params.dealId !== undefined) urlParams.set("dealId", String(params.dealId));
 		if (params.propertyId !== undefined) urlParams.set("propertyId", String(params.propertyId));
 		urlParams.set("quoteId", String(created.id));
-		const fullUrl = `${base}/steps/04-quote?${urlParams.toString()}`;
+		
+		// Use service-specific routing for the quote URL
+		const quotePath = getStepUrl(4, serviceType);
+		const fullUrl = `${base}${quotePath}?${urlParams.toString()}`;
 		const baseId = Number(created.id);
 		const sequentialId = Number.isFinite(baseId) ? String(100000 + baseId) : String(Math.floor(100000 + Math.random() * 900000));
 		await patchRequest(`/items/os_proposals/${encodeURIComponent(String(created.id))}`, { quote_link: fullUrl, quote_id: sequentialId });

@@ -8,7 +8,12 @@ import type { PropertyRecord } from "@/lib/actions/properties/createProperty";
 import { submitProperty } from "@/lib/actions/properties/submitProperty";
 import SelectField from "@/components/ui/fields/SelectField";
 import TextField from "@/components/ui/fields/TextField";
-import type { extractPropertyDetails as ExtractFn } from "@/lib/actions/properties/extractPropertyDetails";
+import { extractPropertyDetails } from "@/lib/actions/properties/extractPropertyDetails";
+import InfoBox from "@/components/ui/messages/InfoBox";
+import SuccessBox from "@/components/ui/messages/SuccessBox";
+import WarningBox from "@/components/ui/messages/WarningBox";
+import ErrorBox from "@/components/ui/messages/ErrorBox";
+import NoteBox from "@/components/ui/messages/NoteBox";
 
 type Props = {
 	property?: PropertyRecord;
@@ -23,15 +28,22 @@ type Props = {
 	serviceName?: string | null;
 	propertyCategory?: "residential" | "commercial" | string;
 	propertyNote?: string;
-	onExtract?: typeof ExtractFn;
 };
 
 type ActionState = Awaited<ReturnType<typeof submitProperty>>;
 
-export default function PropertiesForm({ property, propertyId, contactId, userId, dealId, quoteId, paymentId, invoiceId, serviceId, serviceName, propertyCategory, propertyNote, onExtract }: Props) {
+export default function PropertiesForm({ property, propertyId, contactId, userId, dealId, quoteId, paymentId, invoiceId, serviceId, serviceName, propertyCategory, propertyNote }: Props) {
 	const initialState: ActionState = {} as any;
 	const [state, formAction] = useActionState<ActionState, FormData>(submitProperty, initialState);
 	const [submitted, setSubmitted] = useState<boolean>(false);
+
+	// Services that don't require full property details extraction (5, 6, 7, 8, 9)
+	const servicesWithoutPropertyDetails = [5, 6, 7, 8, 9];
+	const showPropertyDetails = !serviceId || !servicesWithoutPropertyDetails.includes(serviceId);
+	
+	// Services that need property category and type fields (5, 6, 7, 8, 9)
+	const servicesWithPropertyCategoryType = [5, 6, 7, 8, 9];
+	const showPropertyCategoryType = serviceId && servicesWithPropertyCategoryType.includes(serviceId);
 
 	// Removed other property details; keep only address fields
 	const [addressQuery, setAddressQuery] = useState<string>("");
@@ -47,6 +59,21 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	const [suburb, setSuburb] = useState<string>(property?.suburb || "");
 	const [propertyStateCode, setPropertyStateCode] = useState<string>(property?.state || "");
 	const [postcode, setPostcode] = useState<string>(property?.post_code || "");
+
+	// Property category and type for services 5, 6, 7, 8, 9
+	const [propertyCategoryValue, setPropertyCategoryValue] = useState<string>(() => {
+		const raw = property?.property_category || propertyCategory;
+		if (!raw) return "";
+		const lower = String(raw).toLowerCase();
+		if (lower === "residential") return "Residential";
+		if (lower === "commercial") return "Commercial";
+		return "";
+	});
+	const [propertyTypeValue, setPropertyTypeValue] = useState<string>(property?.property_type || "");
+	
+	// Additional fields for construction stages service (service 5)
+	const [areaSizeValue, setAreaSizeValue] = useState<string>(property?.area_sq ? String(property.area_sq) : "");
+	const [numberOfLevelsValue, setNumberOfLevelsValue] = useState<string>(property?.number_of_levels ? String(property.number_of_levels) : "");
 
 	// Extraction loading and results
 	const [extracting, setExtracting] = useState<boolean>(false);
@@ -158,72 +185,13 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		color: "var(--color-text-secondary)",
 	};
 
-	// Message box styles with colored backgrounds and dark gray text
-	const extractingTextRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #3b82f6",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-
-	const successTextRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #10b981",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-
-	const warnTextRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #ef4444",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-
-	const errorTextRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #ef4444",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
-
-	const countsWarnTextRowStyle: React.CSSProperties = {
-		display: "flex",
-		alignItems: "center",
-		gap: 8,
-		background: "#ffffff",
-		border: "1px solid #f59e0b",
-		color: "#595959",
-		borderRadius: 6,
-		padding: 8,
-		marginBottom: 4,
-	};
 
 	const addressError = useMemo(() => {
 		const serverError = state?.errors?.full_address;
 		// Clear error as soon as user types or selects an address
 		if (addressSelected) return undefined;
 		if (addressQuery.trim().length > 0) return undefined;
+		// Address is always required (even for specialized services)
 		return serverError ?? (submitted ? "Full address is required" : undefined);
 	}, [state?.errors?.full_address, addressSelected, addressQuery, submitted]);
 
@@ -233,6 +201,22 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	const showQuotingErrors = useMemo(() => {
 		return submitted && (hasExtracted || !!extractError);
 	}, [submitted, hasExtracted, extractError]);
+
+	// Validation for property category and type fields (services 5, 6, 7, 8, 9)
+	const propertyCategoryError = showPropertyCategoryType && !propertyCategoryValue
+		? (quotingErrors.quoting_property_classification ?? (submitted ? "Required" : undefined))
+		: undefined;
+	const propertyTypeErrorSpecialized = showPropertyCategoryType && !propertyTypeValue
+		? (quotingErrors.quoting_property_type ?? (submitted ? "Required" : undefined))
+		: undefined;
+		
+	// Validation for construction stages specific fields (service 5)
+	const areaSizeError = serviceId === 5 && !areaSizeValue
+		? (quotingErrors.area_sq ?? (submitted ? "Required" : undefined))
+		: undefined;
+	const numberOfLevelsError = serviceId === 5 && !numberOfLevelsValue
+		? (quotingErrors.number_of_levels ?? (submitted ? "Required" : undefined))
+		: undefined;
 
 	function isNumericString(value?: string) {
 		return typeof value === "string" && /^\d+$/.test(value);
@@ -369,6 +353,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		return qs ? `/steps/01-contact?${qs}` : "/steps/01-contact";
 	}, [userId, dealId, contactId, property?.id, propertyId, invoiceId, quoteId, paymentId]);
 
+	// Debug state - simplified to avoid function serialization issues
+	console.log("[PropertiesForm] Rendering form - serviceId:", serviceId, "showPropertyDetails:", showPropertyDetails, "extracting:", extracting, "addressSelected:", addressSelected);
+
 	return (
 		<div style={cardStyle}>
 			{extracting ? (
@@ -376,9 +363,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 			) : null}
 			{/* Service label removed per request */}
 			{propertyNote ? (
-				<div style={noteStyle}>
-					<div>{propertyNote}</div>
-				</div>
+				<NoteBox style={{ marginBottom: 16 }}>
+					{propertyNote}
+				</NoteBox>
 			) : null}
 
 			<form action={formAction} className="form-grid" style={gridStyle} noValidate aria-busy={extracting} onSubmit={() => setSubmitted(true)}>
@@ -402,6 +389,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 						onSelect={(opt) => {
 							const s = addressSuggestions.find((x) => x.id === opt.value);
 							if (s) {
+								console.log("[PropertiesForm] Address selected for service:", serviceId);
 								setAddressSelected(true);
 								setAddressLabel(s.label);
 								setStreetAddress(s.street_address || "");
@@ -413,13 +401,19 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 								setHasExtracted(false);
 								setQuoteEditable({});
 								setClientInfo(null);
-								// Trigger extraction using the selected address label
-								(async () => {
-									setExtractError("");
-									setExtracting(true);
-									console.log("[PropertiesForm] Starting extraction for", s.label);
-									try {
-										const res = onExtract ? await onExtract({ address: s.label }) : null;
+								// For services 7, 8, 9, mark as extracted without triggering property details extraction
+								if (showPropertyCategoryType) {
+									console.log("[PropertiesForm] Specialized service (7, 8, 9) - marking as extracted without property details");
+									setHasExtracted(true);
+									setExtracting(false);
+								} else if (showPropertyDetails) {
+									// Trigger extraction using the selected address label (only for services that need property details)
+									(async () => {
+										setExtractError("");
+										setExtracting(true);
+										console.log("[PropertiesForm] Starting extraction for", s.label);
+										try {
+											const res = await extractPropertyDetails({ address: s.label });
 										console.log("[PropertiesForm] Extraction result", res);
 										if (res?.quoting_info) {
 											setQuoteEditable({
@@ -465,10 +459,11 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 										setExtracting(false);
 										console.log("[PropertiesForm] Extraction finished");
 									}
-								})();
+									})();
+								}
 							}
 						}}
-						required
+						required={true}
 						loading={extracting || addressLoading}
 						error={addressError}
 						autoComplete="off"
@@ -476,61 +471,104 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 				</div>
 
 				{addressNotFound ? (
-					<div style={{ gridColumn: "1 / -1", ...errorTextRowStyle }}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#ef4444" }}>
-							<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-							<circle cx="12" cy="16" r="1" fill="currentColor" />
-							<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-						</svg>
-						<span>Address not found. Please try again.</span>
-					</div>
+					<ErrorBox style={{ gridColumn: "1 / -1" }}>
+						Address not found. Please try again.
+					</ErrorBox>
 				) : null}
 
-				{/* Extracting message as inline text (no box), success green */}
-				{extracting ? (
-					<div style={{ gridColumn: "1 / -1", ...extractingTextRowStyle }}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#3b82f6" }}>
-							<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-							<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2">
-								<animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
-							</path>
-						</svg>
-						<span>Please hold on, we're extracting your property details from our database</span>
-					</div>
+				{/* Property Category and Type fields for services 5, 6, 7, 8, 9 */}
+				{showPropertyCategoryType ? (
+					<>
+						<SelectField
+							name="quoting_property_classification"
+							label="Property Classification"
+							value={propertyCategoryValue}
+							onChange={(e) => setPropertyCategoryValue(e.target.value)}
+							error={propertyCategoryError}
+							required
+							options={[
+								{ value: "", label: "Select classification" },
+								{ value: "Residential", label: "Residential" },
+								{ value: "Commercial", label: "Commercial" },
+							]}
+						/>
+						<SelectField
+							name="quoting_property_type"
+							label="Property Type"
+							value={propertyTypeValue}
+							onChange={(e) => setPropertyTypeValue(e.target.value)}
+							error={propertyTypeErrorSpecialized}
+							required
+							options={[
+								{ value: "", label: "Select type" },
+								{ value: "House", label: "House" },
+								{ value: "Townhouse", label: "Townhouse" },
+								{ value: "Apartment/Unit", label: "Apartment/Unit" },
+								{ value: "Villa", label: "Villa" },
+								{ value: "Duplex", label: "Duplex" },
+								{ value: "Office", label: "Office" },
+								{ value: "Retail", label: "Retail" },
+								{ value: "Industrial", label: "Industrial" },
+								{ value: "Warehouse", label: "Warehouse" },
+								{ value: "Other", label: "Other" },
+							]}
+						/>
+						{/* Additional fields for construction stages service (service 5) */}
+						{serviceId === 5 ? (
+							<>
+								<TextField
+									name="area_sq"
+									label="Area Size (sq m)"
+									value={areaSizeValue}
+									onChange={(e) => setAreaSizeValue(e.target.value)}
+									error={areaSizeError}
+									required
+									inputMode="numeric"
+									pattern="^\\d+(\\.\\d+)?$"
+									placeholder="Enter area in square meters"
+								/>
+								<TextField
+									name="number_of_levels"
+									label="Number of Levels"
+									value={numberOfLevelsValue}
+									onChange={(e) => setNumberOfLevelsValue(e.target.value)}
+									error={numberOfLevelsError}
+									required
+									inputMode="numeric"
+									pattern="^\\d+$"
+									placeholder="Enter number of levels"
+								/>
+							</>
+						) : null}
+					</>
 				) : null}
-				{!extracting && hasExtracted && !missingCoreCounts ? (
-					<div style={{ gridColumn: "1 / -1", ...successTextRowStyle }}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#10b981" }}>
-							<path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-						</svg>
-						<span>Property details extracted. Please double‑check, modify if needed, then hit Next.</span>
-					</div>
+
+				{/* Extracting message as inline text (no box), success green - only show for services that need property details */}
+				{showPropertyDetails && extracting ? (
+					<InfoBox style={{ gridColumn: "1 / -1" }}>
+						Please hold on, we're extracting your property details from our database
+					</InfoBox>
 				) : null}
-				{!extracting && !!extractError && !missingCoreCounts ? (
-					<div style={{ gridColumn: "1 / -1", ...warnTextRowStyle }}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#ef4444" }}>
-							<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-							<circle cx="12" cy="16" r="1" fill="currentColor" />
-							<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-						</svg>
-						<span>We couldn't extract your property details. Please fill out the form and hit Next.</span>
-					</div>
+				{showPropertyDetails && !extracting && hasExtracted && !missingCoreCounts ? (
+					<SuccessBox style={{ gridColumn: "1 / -1" }}>
+						Property details extracted. Please double‑check, modify if needed, then hit Next.
+					</SuccessBox>
+				) : null}
+				{showPropertyDetails && !extracting && !!extractError && !missingCoreCounts ? (
+					<ErrorBox style={{ gridColumn: "1 / -1" }}>
+						We couldn't extract your property details. Please fill out the form and hit Next.
+					</ErrorBox>
 				) : null}
 
 				{/* Warn specifically if core counts are missing (bedrooms, bathrooms, levels) */}
-				{!extracting && (hasExtracted || !!extractError) && missingCoreCounts ? (
-					<div style={{ gridColumn: "1 / -1", ...countsWarnTextRowStyle }}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style={{ color: "#f59e0b" }}>
-							<path d="M12 2l10 18H2L12 2z" stroke="currentColor" strokeWidth="2" fill="none" />
-							<circle cx="12" cy="16" r="1" fill="currentColor" />
-							<path d="M12 8v5" stroke="currentColor" strokeWidth="2" />
-						</svg>
-						<span>We couldn't extract all property information. Please fill out the form and hit Next.</span>
-					</div>
+				{showPropertyDetails && !extracting && (hasExtracted || !!extractError) && missingCoreCounts ? (
+					<WarningBox style={{ gridColumn: "1 / -1" }}>
+						We couldn't extract all property information. Please fill out the form and hit Next.
+					</WarningBox>
 				) : null}
 
-				{/* Quoting info editable fields (render only after extraction result) */}
-				{(hasExtracted || !!extractError) && !extracting ? (
+				{/* Quoting info editable fields (render only after extraction result and for services that need property details) */}
+				{(hasExtracted || !!extractError) && !extracting && showPropertyDetails ? (
 					<>
 						<SelectField
 							name="quoting_property_classification"
@@ -649,13 +687,18 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 				<input type="hidden" name="state" value={propertyStateCode} />
 				<input type="hidden" name="post_code" value={postcode} />
 				{/* Hidden quoting fields to submit */}
-				<input type="hidden" name="quoting_property_classification" value={quoteEditable.property_classification ?? ""} />
-				<input type="hidden" name="quoting_property_type" value={quoteEditable.property_type ?? ""} />
-				<input type="hidden" name="quoting_bedrooms_including_study" value={quoteEditable.bedrooms_including_study ?? ""} />
-				<input type="hidden" name="quoting_bathrooms_rounded" value={quoteEditable.bathrooms_rounded ?? ""} />
-				<input type="hidden" name="quoting_levels" value={quoteEditable.levels ?? ""} />
-				<input type="hidden" name="quoting_has_basement_or_subfloor" value={quoteEditable.has_basement_or_subfloor ?? ""} />
-				<input type="hidden" name="quoting_additional_structures" value={quoteEditable.additional_structures ?? ""} />
+				<input type="hidden" name="quoting_property_classification" value={showPropertyCategoryType ? propertyCategoryValue : (quoteEditable.property_classification ?? "")} />
+				<input type="hidden" name="quoting_property_type" value={showPropertyCategoryType ? propertyTypeValue : (quoteEditable.property_type ?? "")} />
+				{/* Only submit detailed property fields for services that need full property details (not 5, 6, 7, 8, 9) */}
+				{showPropertyDetails ? (
+					<>
+						<input type="hidden" name="quoting_bedrooms_including_study" value={quoteEditable.bedrooms_including_study ?? ""} />
+						<input type="hidden" name="quoting_bathrooms_rounded" value={quoteEditable.bathrooms_rounded ?? ""} />
+						<input type="hidden" name="quoting_levels" value={quoteEditable.levels ?? ""} />
+						<input type="hidden" name="quoting_has_basement_or_subfloor" value={quoteEditable.has_basement_or_subfloor ?? ""} />
+						<input type="hidden" name="quoting_additional_structures" value={quoteEditable.additional_structures ?? ""} />
+					</>
+				) : null}
 				<input type="hidden" name="termite_risk" value={clientInfo?.termite_risk ?? ""} />
 				<input type="hidden" name="termite_risk_reason" value={clientInfo?.termite_risk_reason ?? ""} />
 				{/* Additional extracted metadata */}
@@ -710,7 +753,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 
 				<div style={{ ...actionsStyle, gridColumn: "1 / -1", pointerEvents: extracting ? "none" : undefined, opacity: extracting ? 0.6 : 1 }}>
 					<PreviousButton href={extracting ? undefined : prevHref} />
-					<NextButton disabled={extracting} />
+					<NextButton disabled={extracting || Boolean(showPropertyCategoryType && (!addressSelected || !propertyCategoryValue || !propertyTypeValue || (serviceId === 5 && (!areaSizeValue || !numberOfLevelsValue))))} />
 				</div>
 			</form>
 		</div>

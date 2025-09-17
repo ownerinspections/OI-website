@@ -3,6 +3,7 @@
 import { useState } from "react";
 import TextField from "@/components/ui/fields/TextField";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
+import EmailField from "@/components/ui/fields/EmailField";
 
 interface AddAgentButtonProps {
     onAgentAdded?: (agentIndex: number) => void;
@@ -20,38 +21,54 @@ export default function AddAgentButton({ onAgentAdded }: AddAgentButtonProps) {
         setAgentCount(prev => prev - 1);
     };
 
+    const handleRemoveAgent = (index: number) => () => {
+        removeAgent(index);
+    };
+
     return (
         <div>
-            <div>
-                {Array.from({ length: agentCount }, (_, index) => (
-                    <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, marginTop: 8, alignItems: "end" }}>
-                        <TextField name={`new_agent_${index + 2}_first_name`} label="First name" />
-                        <TextField name={`new_agent_${index + 2}_last_name`} label="Last name" />
-                        <AuPhoneField name={`new_agent_${index + 2}_mobile`} label="Mobile" />
-                        <button 
-                            type="button" 
-                            onClick={() => removeAgent(index)}
-                            style={{
-                                height: "var(--field-height)",
-                                width: "var(--field-height)",
-                                backgroundColor: "transparent",
-                                color: "var(--color-text-muted)",
-                                border: "1px solid var(--color-light-gray)",
-                                borderRadius: "6px",
-                                cursor: "pointer",
-                                fontSize: "16px",
-                                fontWeight: "400",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                marginBottom: "16px"
-                            }}
-                        >
-                            ×
-                        </button>
-                    </div>
-                ))}
-            </div>
+            {agentCount > 0 && (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {Array.from({ length: agentCount }, (_, index) => (
+                        <div key={index} style={{ position: "relative", display: "grid", gap: 8, padding: 12, border: "1px dashed var(--color-light-gray)", borderRadius: 6, backgroundColor: "var(--color-pale-gray)" }}>
+                            <button 
+                                type="button" 
+                                onClick={handleRemoveAgent(index)}
+                                style={{
+                                    position: "absolute",
+                                    top: 8,
+                                    right: 8,
+                                    width: "20px",
+                                    height: "20px",
+                                    backgroundColor: "transparent",
+                                    color: "var(--color-text-muted)",
+                                    border: "none",
+                                    borderRadius: "50%",
+                                    cursor: "pointer",
+                                    fontSize: "14px",
+                                    fontWeight: "400",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    zIndex: 1
+                                }}
+                            >
+                                ×
+                            </button>
+                            <div style={{ display: "grid", gap: 8 }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                    <TextField name={`new_agent_${index + 2}_first_name`} label="First name" required />
+                                    <TextField name={`new_agent_${index + 2}_last_name`} label="Last name" required />
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                    <EmailField name={`new_agent_${index + 2}_email`} label="Email (optional)" />
+                                    <AuPhoneField name={`new_agent_${index + 2}_mobile`} label="Mobile" required />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 8 }}>
                 <button 
                     type="button" 

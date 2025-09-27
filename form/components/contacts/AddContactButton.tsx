@@ -4,6 +4,25 @@ import { useState } from "react";
 import TextField from "@/components/ui/fields/TextField";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
 import EmailField from "@/components/ui/fields/EmailField";
+import SelectField from "@/components/ui/fields/SelectField";
+
+const CONTACT_TYPE_OPTIONS = [
+	{ value: "agent", label: "Agent" },
+	{ value: "builder", label: "Builder" },
+	{ value: "buyer", label: "Buyer" },
+	{ value: "conveyancer", label: "Conveyancer" },
+	{ value: "developer", label: "Developer" },
+	{ value: "individual", label: "Individual" },
+	{ value: "landlord", label: "Landlord" },
+	{ value: "lawyer", label: "Lawyer" },
+	{ value: "organization", label: "Organization" },
+	{ value: "other", label: "Other" },
+	{ value: "owner", label: "Owner" },
+	{ value: "seller", label: "Seller" },
+	{ value: "site_supervisor", label: "Site Supervisor" },
+	{ value: "solicitor", label: "Solicitor" },
+	{ value: "tenant", label: "Tenant" },
+];
 
 interface AddContactButtonProps {
     onContactAdded?: (contactIndex: number) => void;
@@ -56,6 +75,15 @@ export default function AddContactButton({ onContactAdded }: AddContactButtonPro
                             >
                                 ×
                             </button>
+                            <div style={{ gridColumn: "1 / -1" }}>
+                                <SelectField 
+                                    name={`new_contact_${index + 2}_contact_type`} 
+                                    label="Contact type" 
+                                    options={CONTACT_TYPE_OPTIONS}
+                                    placeholder="Select contact type"
+                                    required 
+                                />
+                            </div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                                 <TextField name={`new_contact_${index + 2}_first_name`} label="First name" required />
                                 <TextField name={`new_contact_${index + 2}_last_name`} label="Last name" required />
@@ -68,18 +96,18 @@ export default function AddContactButton({ onContactAdded }: AddContactButtonPro
                     ))}
                 </div>
             )}
-            <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 8 }}>
+            <div style={{ textAlign: "center", marginTop: 16 }}>
                 <button 
                     type="button" 
                     onClick={addContact}
                     style={{
-                        padding: "6px 12px",
-                        backgroundColor: "transparent",
-                        color: "var(--color-secondary-blue)",
-                        border: "1px solid var(--color-secondary-blue)",
-                        borderRadius: "4px",
+                        background: "#0b487b",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "12px 24px",
                         cursor: "pointer",
-                        fontSize: "13px",
+                        fontSize: 14,
                         fontWeight: "500"
                     }}
                 >

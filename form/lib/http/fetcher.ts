@@ -41,11 +41,24 @@ export async function getRequest<T = unknown>(path: string): Promise<T> {
 	const res = await fetch(url, { method: "GET", cache: "no-store" });
 	if (!res.ok) {
 		let details = "";
+		let responseText = "";
 		try {
-			const text = await res.text();
-			details = text ? `: ${text.slice(0, 2000)}` : "";
-			try { console.error("[HTTP] GET error", { url, status: res.status, responseBody: text?.slice(0, 2000) }); } catch {}
+			responseText = await res.text();
+			details = responseText ? `: ${responseText.slice(0, 2000)}` : "";
 		} catch {}
+		
+		// Improved error logging with fallback
+		try {
+			console.error("[HTTP] GET error", { 
+				url, 
+				status: res.status, 
+				responseBody: responseText?.slice(0, 2000) 
+			});
+		} catch (logError) {
+			// Fallback logging if console.error fails
+			console.log(`[HTTP] GET error - URL: ${url}, Status: ${res.status}, Response: ${responseText?.slice(0, 500) || 'No response body'}`);
+		}
+		
 		throw new Error(`GET ${url} failed with ${res.status}${details}`);
 	}
 	return parseJsonResponse<T>(res);
@@ -65,11 +78,25 @@ export async function postRequest<T = unknown>(path: string, body?: JsonRecord):
 	});
 	if (!res.ok) {
 		let details = "";
+		let responseText = "";
 		try {
-			const text = await res.text();
-			details = text ? `: ${text.slice(0, 2000)}` : "";
-			try { console.error("[HTTP] POST error", { url, status: res.status, requestBody: body, responseBody: text?.slice(0, 2000) }); } catch {}
+			responseText = await res.text();
+			details = responseText ? `: ${responseText.slice(0, 2000)}` : "";
 		} catch {}
+		
+		// Improved error logging with fallback
+		try {
+			console.error("[HTTP] POST error", { 
+				url, 
+				status: res.status, 
+				requestBody: body, 
+				responseBody: responseText?.slice(0, 2000) 
+			});
+		} catch (logError) {
+			// Fallback logging if console.error fails
+			console.log(`[HTTP] POST error - URL: ${url}, Status: ${res.status}, Request: ${JSON.stringify(body)?.slice(0, 200) || 'No body'}, Response: ${responseText?.slice(0, 500) || 'No response body'}`);
+		}
+		
 		throw new Error(`POST ${url} failed with ${res.status}${details}`);
 	}
 	const json = await parseJsonResponse<T>(res);
@@ -95,11 +122,25 @@ export async function postFormRequest<T = unknown>(path: string, body?: FormReco
 	});
 	if (!res.ok) {
 		let details = "";
+		let responseText = "";
 		try {
-			const text = await res.text();
-			details = text ? `: ${text.slice(0, 2000)}` : "";
-			try { console.error("[HTTP] POST-FORM error", { url, status: res.status, requestBody: formBody, responseBody: text?.slice(0, 2000) }); } catch {}
+			responseText = await res.text();
+			details = responseText ? `: ${responseText.slice(0, 2000)}` : "";
 		} catch {}
+		
+		// Improved error logging with fallback
+		try {
+			console.error("[HTTP] POST-FORM error", { 
+				url, 
+				status: res.status, 
+				requestBody: formBody, 
+				responseBody: responseText?.slice(0, 2000) 
+			});
+		} catch (logError) {
+			// Fallback logging if console.error fails
+			console.log(`[HTTP] POST-FORM error - URL: ${url}, Status: ${res.status}, Request: ${formBody?.slice(0, 200) || 'No body'}, Response: ${responseText?.slice(0, 500) || 'No response body'}`);
+		}
+		
 		throw new Error(`POST ${url} failed with ${res.status}${details}`);
 	}
 	return parseJsonResponse<T>(res);
@@ -117,11 +158,25 @@ export async function patchRequest<T = unknown>(path: string, body?: JsonRecord)
 	});
 	if (!res.ok) {
 		let details = "";
+		let responseText = "";
 		try {
-			const text = await res.text();
-			details = text ? `: ${text.slice(0, 2000)}` : "";
-			try { console.error("[HTTP] PATCH error", { url, status: res.status, requestBody: body, responseBody: text?.slice(0, 2000) }); } catch {}
+			responseText = await res.text();
+			details = responseText ? `: ${responseText.slice(0, 2000)}` : "";
 		} catch {}
+		
+		// Improved error logging with fallback
+		try {
+			console.error("[HTTP] PATCH error", { 
+				url, 
+				status: res.status, 
+				requestBody: body, 
+				responseBody: responseText?.slice(0, 2000) 
+			});
+		} catch (logError) {
+			// Fallback logging if console.error fails
+			console.log(`[HTTP] PATCH error - URL: ${url}, Status: ${res.status}, Request: ${JSON.stringify(body)?.slice(0, 200) || 'No body'}, Response: ${responseText?.slice(0, 500) || 'No response body'}`);
+		}
+		
 		throw new Error(`PATCH ${url} failed with ${res.status}${details}`);
 	}
 	return parseJsonResponse<T>(res);

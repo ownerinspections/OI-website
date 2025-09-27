@@ -120,6 +120,9 @@ export default function DilapidationQuotesForm({
 	gstRate = 10, 
 	proposalStatus 
 }: Props) {
+	// Check if quote is paid and should be read-only
+	const isReadOnly = proposalStatus === "paid";
+	
 	// Use exact same styles as QuotesForm
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", marginBottom: 8 };
@@ -146,15 +149,28 @@ export default function DilapidationQuotesForm({
 	// Calculate totals
 	const baseAmount = Number(quote?.amount ?? quote?.quote_amount ?? 0);
 	
-	// Calculate addons total across all properties
-	const addonsTotal = Object.entries(selectedAddons).reduce((total, [propertyId, propertySelectedAddons]) => {
-		return total + Object.entries(propertySelectedAddons)
+	// Calculate individual property prices (base quote divided by number of properties + their specific addons)
+	const propertyPrices = propertyQuotes.map((pq, index) => {
+		const propertyBasePrice = propertyQuotes.length > 0 ? baseAmount / propertyQuotes.length : 0;
+		const propertySelectedAddons = selectedAddons[pq.property.id] || {};
+		const propertyAddonsTotal = Object.entries(propertySelectedAddons)
 			.filter(([, on]) => Boolean(on))
 			.reduce((sum, [id]) => {
 				const addon = addons.find(a => a.id === Number(id));
 				return sum + (addon?.price ?? 0);
 			}, 0);
-	}, 0);
+		
+		return {
+			propertyId: pq.property.id,
+			index,
+			basePrice: propertyBasePrice,
+			addonsTotal: propertyAddonsTotal,
+			total: propertyBasePrice + propertyAddonsTotal
+		};
+	});
+	
+	// Calculate addons total across all properties
+	const addonsTotal = propertyPrices.reduce((total, pp) => total + pp.addonsTotal, 0);
 
 	const subtotal = baseAmount + addonsTotal;
 	const gstAmount = +(subtotal * ((gstRate || 10) / 100)).toFixed(2);
@@ -173,28 +189,42 @@ export default function DilapidationQuotesForm({
 		const timer = setTimeout(async () => {
 			if (!alive) return;
 			try {
-				// Collect all selected addon IDs across all properties
-				const allSelectedAddonIds = Object.values(selectedAddons)
-					.flatMap(propertyAddons => 
-						Object.entries(propertyAddons)
-							.filter(([, on]) => Boolean(on))
-							.map(([id]) => Number(id))
-							.filter((n) => Number.isFinite(n))
-					);
+				// Collect selected addon IDs by property for different addon fields
+				const propertyAddonData: Record<string, number[]> = {};
+				
+				// Map property IDs to their index to determine field names
+				propertyQuotes.forEach((pq, index) => {
+					const addonFieldName = index === 0 ? 'addons' : `addons${index + 1}`;
+					
+					const propertySelectedAddons = selectedAddons[pq.property.id] || {};
+					const selectedAddonIds = Object.entries(propertySelectedAddons)
+						.filter(([, on]) => Boolean(on))
+						.map(([id]) => Number(id))
+						.filter((n) => Number.isFinite(n));
+					
+					if (selectedAddonIds.length > 0) {
+						propertyAddonData[addonFieldName] = selectedAddonIds;
+					}
+				});
+
+				console.log("[DilapidationQuotesForm] Sending property addon data:", {
+					total,
+					propertyAddonData
+				});
 
 				await fetch(`/api/proposals/${encodeURIComponent(String(id))}/total`, {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ 
 						total, 
-						addons: allSelectedAddonIds
+						propertyAddons: propertyAddonData
 					}),
 					cache: "no-store",
 				});
 			} catch {}
 		}, 300);
 		return () => { alive = false; clearTimeout(timer); };
-	}, [quote?.id, totalAmountIncludingGst, selectedAddons]);
+	}, [quote?.id, totalAmountIncludingGst, selectedAddons, propertyPrices]);
 
 	const prevHref = (() => {
 		const params = new URLSearchParams();
@@ -264,7 +294,7 @@ export default function DilapidationQuotesForm({
 							<InfoBox>
 								<div>
 									<div style={{ fontWeight: 600 }}>Optional add-ons for this property</div>
-									<div style={{ fontSize: 12, marginTop: 2 }}>Add extra services to tailor your quote for this property. Toggle items below on or off — totals update automatically.</div>
+									<div style={{ fontSize: 12, marginTop: 2 }}>{isReadOnly ? "Selected add-on services for your quote." : "Add extra services to tailor your quote for this property. Toggle items below on or off — totals update automatically."}</div>
 								</div>
 							</InfoBox>
 							{(() => {
@@ -288,13 +318,14 @@ export default function DilapidationQuotesForm({
 										<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 											<Toggle 
 												checked={Boolean(selectedAddons[propertyQuote.property.id]?.[a.id])} 
-												onChange={(next) => setSelectedAddons((prev) => ({
+												onChange={(next) => !isReadOnly && setSelectedAddons((prev) => ({
 													...prev,
 													[propertyQuote.property.id]: {
 														...prev[propertyQuote.property.id],
 														[a.id]: next
 													}
 												}))} 
+												disabled={isReadOnly}
 											/>
 											<AddonTooltip addonId={a.id}>
 												<span style={addonNameStyle}>{a.name}</span>
@@ -328,7 +359,7 @@ export default function DilapidationQuotesForm({
 			</div>
 
 			{/* Navigation - Exact same as QuotesForm */}
-			{proposalStatus !== "approved" && (
+			{proposalStatus !== "paid" && (
 				<div style={actionsStyle}>
 					<PreviousButton href={prevHref} />
 					<button 

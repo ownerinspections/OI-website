@@ -88,14 +88,32 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			const propId = propertyId || (deal?.property ? String(deal.property) : undefined);
 			const property = propId ? await getProperty(propId) : null;
 			
+			// Get inspection stages from deal first, fallback to property or default
+			const dealInspectionStages: any[] = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+			const selectedStageNumbers = dealInspectionStages.length > 0 
+				? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: ((property as any)?.stages && Array.isArray((property as any).stages) && (property as any).stages.length > 0 ? (property as any).stages : [1, 2, 3]);
+			
 			if (service?.service_type && property) {
+				// Get all available stages from service configuration first
+				let allServiceStages: any[] = [];
+				try {
+					const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+					allServiceStages = (serviceRes as any)?.data?.stages || [];
+					console.log("[StepQuote][DefectsInvestigation] All service stages:", allServiceStages);
+				} catch (error) {
+					console.warn("Failed to fetch service stages:", error);
+				}
+				
 				const propertyDetails: PropertyDetails = {
 					property_category: (property?.property_category as any) || "residential",
 					bedrooms: (property as any)?.number_of_bedrooms || 0,
 					bathrooms: (property as any)?.number_of_bathrooms || 0,
 					levels: (property as any)?.number_of_levels || 0,
 					basement: Boolean((property as any)?.basement),
-					stages: (property as any)?.stages && Array.isArray((property as any).stages) && (property as any).stages.length > 0 ? (property as any).stages : [1, 2],
+					stages: allServiceStages.length > 0 
+						? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+						: [1, 2, 3], // Fallback to default stages
 					area_sq: (property as any)?.area_sq || 0,
 					estimated_damage_loss: (property as any)?.estimated_damage_loss || 0,
 				};
@@ -120,7 +138,10 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 					// Store stage prices for defects investigation
 					if (service.service_type === "defects_investigation" && estimate.stage_prices) {
 						stagePrices = Array.isArray(estimate.stage_prices) ? estimate.stage_prices : [];
-						preselectedStages = stagePrices.map(s => s.stage); // Default to all stages selected
+						// Use stages from deal if available, otherwise empty (toggles OFF)
+						preselectedStages = dealInspectionStages.length > 0 
+							? selectedStageNumbers 
+							: [];
 					}
 					
 					// Store the base estimate for QuotesForm to use in calculations
@@ -144,10 +165,28 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		let amount = 0;
 		let note: string | undefined = undefined;
 		
+		// Get inspection stages from deal first, fallback to property or default
+		const dealInspectionStages: any[] = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+		const selectedStageNumbers = dealInspectionStages.length > 0 
+			? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+			: ((property as any)?.stages || [1, 2, 3]); // Default 3 stages if not specified
+		
+		// Get all available stages from service configuration first
+		let allServiceStages: any[] = [];
+		try {
+			const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+			allServiceStages = (serviceRes as any)?.data?.stages || [];
+			console.log("[StepQuote][DefectsInvestigation][NewProposal] All service stages:", allServiceStages);
+		} catch (error) {
+			console.warn("Failed to fetch service stages:", error);
+		}
+		
 		// Use service-specific quote estimation for defects investigation
 		const propertyDetails: PropertyDetails = {
 			property_category,
-			stages: (property as any)?.stages || [1, 2], // Default stages if not specified
+			stages: allServiceStages.length > 0 
+				? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: [1, 2, 3], // Fallback to default stages
 		};
 		
 		try {
@@ -158,7 +197,10 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			// Store stage prices for defects investigation
 			if (estimate?.stage_prices) {
 				stagePrices = Array.isArray(estimate.stage_prices) ? estimate.stage_prices : [];
-				preselectedStages = stagePrices.map(s => s.stage); // Default to all stages selected
+				// Use stages from deal if available, otherwise empty (toggles OFF)
+				preselectedStages = dealInspectionStages.length > 0 
+					? selectedStageNumbers 
+					: [];
 			}
 		} catch (error) {
 			console.warn("[StepQuote] Defects investigation quote estimation failed:", error);
@@ -378,7 +420,25 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						{ label: "Expiry Date", value: expiryDateFmt },
 					]}
 				/>
-				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} paymentId={paymentId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} gstRate={gstRate} proposalStatus={statusRaw} stagePrices={stagePrices} preselectedStages={preselectedStages} serviceId={8} />
+				<QuotesForm 
+					quote={viewModel as any} 
+					dealId={dealId} 
+					contactId={contactId} 
+					propertyId={propertyId} 
+					invoiceId={invoiceId} 
+					paymentId={paymentId} 
+					quoteNote={quoteNote} 
+					addons={addons} 
+					termiteRisk={termiteRisk} 
+					termiteRiskReason={termiteRiskReason} 
+					preselectedAddonIds={preselectedAddonIds} 
+					userId={userId} 
+					gstRate={gstRate} 
+					proposalStatus={statusRaw}
+					stagePrices={stagePrices}
+					preselectedStages={preselectedStages.length > 0 ? preselectedStages : []}
+					serviceId={8}
+				/>
 			</div>
 		</div>
 	);

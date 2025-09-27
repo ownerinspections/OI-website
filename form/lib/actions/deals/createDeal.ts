@@ -10,7 +10,6 @@ export type DealInput = {
 	deal_type: "residential" | "commercial";
 	owner: string;
 	deal_stage: string;
-	contact: string;
 	service: number;
 	property?: string;
 	user?: string;
@@ -26,7 +25,6 @@ export async function createDeal(data: DealInput) {
 		deal_type: data.deal_type,
 		owner: data.owner || DEAL_OWNER_ID,
 		deal_stage: data.deal_stage || DEAL_STAGE_NEW_ID,
-		contact: data.contact,
 		service: data.service,
 		...(data.property ? { property: data.property } : {} as any),
 		...(data.user ? { user: data.user } : {} as any),

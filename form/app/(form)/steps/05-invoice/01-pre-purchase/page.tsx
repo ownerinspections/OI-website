@@ -26,7 +26,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	let proposal: any = null;
 	if (quoteId) {
 		try {
-			const res = await getRequest<{ data: any }>(`/items/os_proposals/${encodeURIComponent(String(quoteId))}?fields=id,deal,contact,quote_amount,status,date_created`);
+			const res = await getRequest<{ data: any }>(`/items/os_proposals/${encodeURIComponent(String(quoteId))}?fields=id,deal,contact,quote_amount,inspection_amount,status,date_created`);
 			proposal = (res as any)?.data ?? null;
 		} catch {
 			proposal = null;
@@ -36,7 +36,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 	// Resolve a proposal if not provided explicitly
 	if (!proposal && dealId) {
 		try {
-			const res = await getRequest<{ data: any[] }>(`/items/os_proposals?filter%5Bdeal%5D%5B_eq%5D=${encodeURIComponent(String(dealId))}&sort=-date_created&limit=1`);
+			const res = await getRequest<{ data: any[] }>(`/items/os_proposals?filter%5Bdeal%5D%5B_eq%5D=${encodeURIComponent(String(dealId))}&sort=-date_created&limit=1&fields=id,deal,contact,quote_amount,inspection_amount,status,date_created`);
 			proposal = Array.isArray((res as any)?.data) && (res as any).data.length > 0 ? (res as any).data[0] : null;
 		} catch {
 			proposal = null;
@@ -119,8 +119,9 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 					serviceName = svc.service_name || svc.service_type || serviceName;
 				} catch {}
 			}
-			// First line: service, using quote subtotal
-			displayLineItems.push({ name: serviceName, description: "Quote amount", quantity: 1, unit_price: subtotal, total: subtotal });
+			// First line: service, using base inspection amount (not total quote amount)
+			const baseInspectionAmount = Number(proposal?.inspection_amount ?? 0);
+			displayLineItems.push({ name: serviceName, description: "Inspection amount", quantity: 1, unit_price: baseInspectionAmount, total: baseInspectionAmount });
 			// Resolve addons
 			const addonIds: number[] = Array.isArray(deal?.addons) ? deal.addons : [];
 			if (addonIds.length > 0) {
@@ -364,7 +365,7 @@ export default async function StepInvoice({ searchParams }: { searchParams?: Pro
 					gst_rate: gstRateResult,
 					line_items: displayLineItems.length > 0 ? displayLineItems : ((invoice as any).line_items || []),
 					property: propertyInfoResult || undefined,
-				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} prevHref={(() => {
+				}} companyInfo={companyInfoResult} customerInfo={customerInfoResult} hideDescriptions={true} prevHref={(() => {
 					const prevParams = new URLSearchParams();
 					// Standard order: userId > contactId > dealId > propertyId > quoteId > invoiceId > paymentId
 					if (userId) prevParams.set("userId", String(userId));

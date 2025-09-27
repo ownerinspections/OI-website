@@ -264,10 +264,10 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 			}
 		}
 		
-		// Handle contact person for all inspections
+		// Handle contact person for all inspections (except dilapidation which has its own logic)
 		let contactPersonId: string | number | undefined = undefined;
 		
-		if (inspectionType) {
+		if (inspectionType && inspectionType !== "dilapidation") {
 			// Get all property-specific contact person choices
 			const contactPersonChoices: Record<string, string> = {};
 			for (const [key, value] of formData.entries()) {
@@ -358,9 +358,7 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 					console.log(`✅ [SUBMIT BOOKING] Using current contact ${contactId} as contact person for property ${propertyId}`);
 				}
 				
-				// For now, we'll use the last processed contact person
-				// In a multi-property scenario, you might want to handle this differently
-				break;
+				// Continue processing other properties - don't break here
 			}
 			
 			// If no contact person choices were found, default to using the main contact
@@ -648,9 +646,10 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 					
 					// Set the appropriate contact_person field based on property index
 					if (propertyContactPersonId) {
+						// Map property index to correct contact_person field: 0->contact_person, 1->contact_person2, 2->contact_person3, 3->contact_person4
 						const contactPersonField = propertyIndex === 0 ? 'contact_person' : `contact_person${propertyIndex + 1}`;
 						dealUpdateData[contactPersonField] = String(propertyContactPersonId);
-						console.log(`🔗 [SUBMIT BOOKING] Updating deal ${dealId} with ${contactPersonField} for property ${propertyId}: ${propertyContactPersonId}`);
+						console.log(`🔗 [SUBMIT BOOKING] Updating deal ${dealId} with ${contactPersonField} for property ${propertyId} (index ${propertyIndex}): ${propertyContactPersonId}`);
 					} else {
 						console.warn(`⚠️ [SUBMIT BOOKING] No contact person ID determined for property ${propertyId} with choice "${choice}"`);
 					}
@@ -664,56 +663,60 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 					console.warn(`⚠️ [SUBMIT BOOKING] No contact person determined for deal ${dealId} - this may indicate an issue with the contact person selection logic`);
 				}
 			}
-			
-			// Update price information from deal_value (already set in quote step)
-			try {
-				const dealRes = await getRequest<{ data: { deal_value?: number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=deal_value`);
-				const dealValue = (dealRes as any)?.data?.deal_value;
-				if (dealValue && dealValue > 0) {
-					dealUpdateData.deal_value = dealValue;
-					console.log(`💰 [SUBMIT BOOKING] Deal ${dealId} already has deal_value: ${dealValue}`);
-				} else {
-					console.warn(`⚠️ [SUBMIT BOOKING] Deal ${dealId} has no deal_value set - this may indicate an issue with the quote step`);
-				}
-			} catch (error) {
-				console.error(`❌ [SUBMIT BOOKING] Failed to load deal_value from deal ${dealId}:`, error);
-			}
-			
-			// Apply updates if any
-			if (Object.keys(dealUpdateData).length > 0) {
-				console.log(`🔧 [SUBMIT BOOKING] About to update deal ${dealId} with data:`, dealUpdateData);
-				try {
-					await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, dealUpdateData);
-					console.log(`✅ [SUBMIT BOOKING] Successfully updated deal ${dealId} with:`, dealUpdateData);
-				} catch (error) {
-					console.error(`❌ [SUBMIT BOOKING] Failed to update deal ${dealId}:`, error);
-				}
+		} else {
+			// For dilapidation inspections, contact person handling is done above in the dilapidation-specific section
+			console.log(`🔗 [SUBMIT BOOKING] Dilapidation inspection - contact person handling completed in dilapidation-specific section`);
+		}
+		
+		// Update price information from deal_value (already set in quote step)
+		try {
+			const dealRes = await getRequest<{ data: { deal_value?: number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=deal_value`);
+			const dealValue = (dealRes as any)?.data?.deal_value;
+			if (dealValue && dealValue > 0) {
+				dealUpdateData.deal_value = dealValue;
+				console.log(`💰 [SUBMIT BOOKING] Deal ${dealId} already has deal_value: ${dealValue}`);
 			} else {
-				console.warn(`⚠️ [SUBMIT BOOKING] No deal update data to apply for deal ${dealId}`);
+				console.warn(`⚠️ [SUBMIT BOOKING] Deal ${dealId} has no deal_value set - this may indicate an issue with the quote step`);
 			}
+		} catch (error) {
+			console.error(`❌ [SUBMIT BOOKING] Failed to load deal_value from deal ${dealId}:`, error);
 		}
 		
-		// Redirect to thank you page
-		if (booking?.id != null) {
-			console.log(`🔄 [SUBMIT BOOKING] Redirecting to thank you page with booking ID: ${booking.id}`);
-			const params = new URLSearchParams();
-			params.set("bookingId", String(booking?.id));
-			if (userId) params.set("userId", String(userId));
-			if (contactId) params.set("contactId", String(contactId));
-			if (dealId) params.set("dealId", String(dealId));
-			if (propertyId) params.set("propertyId", String(propertyId));
-			if (quoteId) params.set("quoteId", String(quoteId));
-			if (invoiceId) params.set("invoiceId", String(invoiceId));
-			
-			console.log(`🔄 [SUBMIT BOOKING] Redirect URL: /steps/09-thank-you?${params.toString()}`);
-			redirect(`/steps/09-thank-you?${params.toString()}`);
+		// Apply updates if any
+		if (Object.keys(dealUpdateData).length > 0) {
+			console.log(`🔧 [SUBMIT BOOKING] About to update deal ${dealId} with data:`, dealUpdateData);
+			try {
+				await patchRequest(`/items/os_deals/${encodeURIComponent(String(dealId))}`, dealUpdateData);
+				console.log(`✅ [SUBMIT BOOKING] Successfully updated deal ${dealId} with:`, dealUpdateData);
+			} catch (error) {
+				console.error(`❌ [SUBMIT BOOKING] Failed to update deal ${dealId}:`, error);
+			}
+		} else {
+			console.warn(`⚠️ [SUBMIT BOOKING] No deal update data to apply for deal ${dealId}`);
 		}
+	}
+	
+	// Redirect to thank you page
+	if (booking?.id != null) {
+		console.log(`🔄 [SUBMIT BOOKING] Redirecting to thank you page with booking ID: ${booking.id}`);
+		const params = new URLSearchParams();
+		params.set("bookingId", String(booking?.id));
+		if (userId) params.set("userId", String(userId));
+		if (contactId) params.set("contactId", String(contactId));
+		if (dealId) params.set("dealId", String(dealId));
+		if (propertyId) params.set("propertyId", String(propertyId));
+		if (quoteId) params.set("quoteId", String(quoteId));
+		if (invoiceId) params.set("invoiceId", String(invoiceId));
 		
-		return {
-			success: true,
-			message: "Booking submitted successfully",
-			debug
-		};
+		console.log(`🔄 [SUBMIT BOOKING] Redirect URL: /steps/09-thank-you?${params.toString()}`);
+		redirect(`/steps/09-thank-you?${params.toString()}`);
+	}
+	
+	return {
+		success: true,
+		message: "Booking submitted successfully",
+		debug
+	};
 		
 	} catch (error) {
 		// Check if this is a Next.js redirect (which is expected behavior)

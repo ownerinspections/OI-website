@@ -36,6 +36,7 @@ type Props = {
 	payNowAction?: () => Promise<void>;
 	termsLink?: string;
 	privacyPolicyLink?: string;
+	hideDescriptions?: boolean;
 };
 
 // Utility function to format Australian phone numbers
@@ -69,7 +70,7 @@ function formatAustralianPhone(phone: string): string {
 	return phone;
 }
 
-export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextHref, prevHref, payNowAction, termsLink, privacyPolicyLink }: Props) {
+export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextHref, prevHref, payNowAction, termsLink, privacyPolicyLink, hideDescriptions }: Props) {
 	const isPaid = (invoice.status || "").toLowerCase() === "paid";
 	const [termsAgreed, setTermsAgreed] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -270,7 +271,7 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 							<tr key={index}>
 								<td style={tdStyle}>
 									<div style={{ fontWeight: 600 }}>{item.name}</div>
-									{item.description && <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{item.description}</div>}
+									{!hideDescriptions && item.description && <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{item.description}</div>}
 								</td>
 								<td style={{ ...tdStyle, textAlign: "center" }}>{item.quantity}</td>
 								<td style={{ ...tdStyle, textAlign: "right" }}>

@@ -141,22 +141,29 @@ export default function DilapidationPropertiesForm({
 
 				{/* Simple Add Button */}
 				{propertyCount < 10 && (
-					<div style={{ gridColumn: "1 / -1", textAlign: "center", marginTop: 16 }}>
+					<div style={{ 
+						gridColumn: "1 / -1", 
+						textAlign: "center", 
+						marginTop: 16,
+						pointerEvents: isAnyExtracting ? "none" : undefined, 
+						opacity: isAnyExtracting ? 0.6 : 1 
+					}}>
 						<button
 							type="button"
 							onClick={addProperty}
+							disabled={isAnyExtracting}
 							style={{
 								background: "#0b487b",
 								color: "white",
 								border: "none",
 								borderRadius: 6,
 								padding: "12px 24px",
-								cursor: "pointer",
+								cursor: isAnyExtracting ? "not-allowed" : "pointer",
 								fontSize: 14,
 								fontWeight: "500"
 							}}
 						>
-							+ Add Property ({propertyCount}/10)
+							+ Add More Property
 						</button>
 					</div>
 				)}
@@ -514,15 +521,20 @@ function PropertyFormSection({
 					/>
 					{!isApartmentUnit ? (
 						<>
-							<TextField
+							<SelectField
 								name={`property_${index}_quoting_levels`}
 								label="Levels"
 								value={quoteEditable.levels ?? ""}
 								onChange={(e) => setQuoteEditable((p) => ({ ...p, levels: e.target.value }))}
-								inputMode="numeric"
-								pattern="^\\d+$"
 								required
 								error={submitted && !quoteEditable.levels ? "Required" : undefined}
+								options={[
+									{ value: "", label: "Select" },
+									{ value: "Single Storey", label: "Single Storey" },
+									{ value: "Double Storey", label: "Double Storey" },
+									{ value: "Triple Storey", label: "Triple Storey" },
+									{ value: "N/A", label: "N/A" },
+								]}
 							/>
 							<SelectField
 								name={`property_${index}_quoting_has_basement_or_subfloor`}

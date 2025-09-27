@@ -17,6 +17,7 @@ export type ContactInput = {
 	last_name: string;
 	email: string;
 	phone: string;
+	contact_type?: string;
 };
 
 export type ActionResult = {
@@ -40,10 +41,14 @@ function validate(input: ContactInput): Record<string, string> {
 	const errors: Record<string, string> = {};
 	if (!input.first_name?.trim()) errors.first_name = "First name is required";
 	if (!input.last_name?.trim()) errors.last_name = "Last name is required";
-	if (!input.email?.trim()) errors.email = "Email is required";
-	else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(input.email)) errors.email = "Enter a valid email";
+	if (!input.email?.trim() && input.contact_type !== "real_estate_agent") errors.email = "Email is required";
+	else if (input.email && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(input.email)) errors.email = "Enter a valid email";
 	if (!input.phone?.trim()) {
-		errors.phone = "Phone is required";
+		if (input.contact_type === "real_estate_agent") {
+			errors.phone = "Phone is required for real estate agents";
+		} else {
+			errors.phone = "Phone is required";
+		}
 	} else {
 		// Check if it's in E.164 format (+61...)
 		if (input.phone.startsWith("+61")) {
@@ -84,12 +89,17 @@ export async function createContact(data: ContactInput): Promise<ActionResult> {
 	}
 
 	try {
-		// 1) Check if contact exists by email
-		const encodedEmail = encodeURIComponent(data.email);
-		console.log("📞 [CREATE CONTACT] Checking for existing contact with email:", data.email);
-		const list = await getRequest<DirectusListResponse<ContactRecord>>(
-			`/items/contacts?filter%5Bemail%5D%5B_eq%5D=${encodedEmail}`
-		);
+		// 1) Check if contact exists by email (only if email is provided)
+		let list: DirectusListResponse<ContactRecord> | undefined = undefined;
+		if (data.email?.trim()) {
+			const encodedEmail = encodeURIComponent(data.email);
+			console.log("📞 [CREATE CONTACT] Checking for existing contact with email:", data.email);
+			list = await getRequest<DirectusListResponse<ContactRecord>>(
+				`/items/contacts?filter%5Bemail%5D%5B_eq%5D=${encodedEmail}`
+			);
+		} else {
+			console.log("📞 [CREATE CONTACT] No email provided, skipping existing contact check");
+		}
 
 		let contactId: string | null = null;
 
@@ -110,15 +120,22 @@ export async function createContact(data: ContactInput): Promise<ActionResult> {
 			// 3) Create new
 			console.log("📞 [CREATE CONTACT] Creating new contact with email:", data.email);
 			try {
+				const contactPayload: Record<string, any> = {
+					status: "published",
+					first_name: data.first_name,
+					last_name: data.last_name,
+					email: data.email || null,
+					phone: data.phone,
+				};
+				
+				// Add contact_type if provided
+				if (data.contact_type) {
+					contactPayload.contact_type = data.contact_type;
+				}
+				
 				const created = await postRequest<DirectusItemResponse<ContactRecord>>(
 					"/items/contacts",
-					{
-						status: "published",
-						first_name: data.first_name,
-						last_name: data.last_name,
-						email: data.email,
-						phone: data.phone,
-					}
+					contactPayload
 				);
 				contactId = created?.data?.id ?? null;
 				console.log("✅ [CREATE CONTACT] Successfully created new contact with ID:", contactId);
@@ -306,7 +323,6 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 			deal_type: service?.property_category === "commercial" ? "commercial" : "residential",
 			owner: DEAL_OWNER_ID,
 			deal_stage: DEAL_STAGE_NEW_ID,
-			contact: resolvedContactId!,
 			service: serviceId,
 			...(userIdForDeal ? { user: userIdForDeal } : {} as any),
 		};
@@ -355,6 +371,22 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 			} catch (_e) {
 				console.error("[submitContact] failed updating deal", _e);
 				debug.push({ tag: "update_deal_error", error: String(_e) });
+			}
+		}
+
+		// Link contact to deal using many-to-many relationship (new contacts field)
+		if (dealId && resolvedContactId) {
+			try {
+				console.log("[submitContact] Linking contact to deal via junction table", { contactId: resolvedContactId, dealId });
+				await postRequest("/items/os_deals_contacts", { 
+					os_deals_id: dealId, 
+					contacts_id: resolvedContactId 
+				});
+				console.log("[submitContact] Successfully linked contact to deal");
+				debug.push({ tag: "contact_deal_link", contactId: resolvedContactId, dealId });
+			} catch (linkErr) {
+				console.error("[submitContact] Failed to link contact to deal:", linkErr);
+				debug.push({ tag: "contact_deal_link_error", error: String(linkErr) });
 			}
 		}
 

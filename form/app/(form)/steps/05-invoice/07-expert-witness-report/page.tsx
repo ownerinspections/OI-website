@@ -103,25 +103,104 @@ export default async function ExpertWitnessReportInvoiceStep({ searchParams }: {
 
     // invoice_link is set during the accept-quote API flow to avoid SSR-time PATCH here.
 
-	// Build display line items from deal (service name + selected addons) without altering totals
+	// Build display line items from deal (individual stages + selected addons) without altering totals
 	let displayLineItems: Array<{ name: string; description?: string; quantity: number; unit_price: number; total: number }> = [];
 	try {
 		if (dealId) {
-			// Fetch service id and addon ids from deal
-			const dealRes = await getRequest<{ data: { service?: string | number; addons?: number[] } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service,addons`);
+			// Fetch service id, inspection stages, and addon ids from deal
+			const dealRes = await getRequest<{ data: { service?: string | number; inspection_stages?: any[]; addons?: number[] } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service,inspection_stages,addons`);
 			const deal = (dealRes as any)?.data || {};
-			// Resolve service name
-			let serviceName: string = "Expert Witness Report";
-			if (deal?.service) {
+			
+			// Get inspection stages first
+			const inspectionStages: any[] = Array.isArray(deal?.inspection_stages) ? deal.inspection_stages : [];
+			
+			// Get stage pricing by re-estimating the quote
+			let stagePrices: Array<{ stage: number; price: number }> = [];
+			if (deal?.service && propertyId && inspectionStages.length > 0) {
 				try {
-					const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(deal.service))}?fields=service_name,service_type`);
-					const svc = (serviceRes as any)?.data || {};
-					serviceName = svc.service_name || svc.service_type || serviceName;
-				} catch {}
+					// Import the estimate function
+					const { estimateExpertWitnessReportQuote } = await import("@/lib/actions/quotes/estimateQuote");
+					const { getProperty } = await import("@/lib/actions/properties/getProperty");
+					
+					// Get property details for estimation
+					const property = await getProperty(propertyId);
+					if (property) {
+						const propertyDetails = {
+							property_category: (property as any)?.property_category || "residential",
+							stages: inspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n)),
+						};
+						
+						// Re-estimate to get current stage prices
+						const estimate = await estimateExpertWitnessReportQuote(propertyDetails);
+						if (estimate && Array.isArray(estimate.stage_prices)) {
+							stagePrices = estimate.stage_prices;
+						}
+					}
+				} catch (estimateError) {
+					console.warn("Failed to estimate stage prices for invoice:", estimateError);
+				}
 			}
-			// First line: service, using quote subtotal
-			displayLineItems.push({ name: serviceName, description: "Quote amount", quantity: 1, unit_price: subtotal, total: subtotal });
-			// Resolve addons
+			
+			// Add individual inspection stages as line items
+			if (inspectionStages.length > 0) {
+				for (const stage of inspectionStages) {
+					if (stage && typeof stage === 'object' && stage.stage_name) {
+						// Use stored stage_price from deal, fallback to re-estimated price if not available
+						let price = Number(stage.stage_price || 0);
+						
+						// Fallback to re-estimated price if stage_price is not stored
+						if (!price && stagePrices.length > 0) {
+							const stageNumber = Number(stage.stage_number);
+							const stagePrice = stagePrices.find(sp => Number(sp.stage) === stageNumber);
+							price = stagePrice ? Number(stagePrice.price || 0) : 0;
+							
+							// Check if this is Document review or Inspection stage for expert witness reports
+							const stageName = stage.stage_name?.toLowerCase() || '';
+							const isDocumentReview = stageName.includes('document') && stageName.includes('review');
+							const isInspectionStage = stageName.includes('inspection') && stageName.includes('stage');
+							
+							// Apply 7x multiplier for Document review and Inspection stage (serviceId 7 = expert witness)
+							if (deal?.service === 7 && (isDocumentReview || isInspectionStage)) {
+								price = price * 7;
+							}
+						}
+						
+						// Also apply 7x multiplier if we have a stored stage_price but it's for Document review or Inspection stage
+						if (price && Number(stage.stage_price || 0) > 0) {
+							const stageName = stage.stage_name?.toLowerCase() || '';
+							const isDocumentReview = stageName.includes('document') && stageName.includes('review');
+							const isInspectionStage = stageName.includes('inspection') && stageName.includes('stage');
+							
+							// Apply 7x multiplier for Document review and Inspection stage (serviceId 7 = expert witness)
+							if (deal?.service === 7 && (isDocumentReview || isInspectionStage)) {
+								price = price * 7;
+							}
+						}
+						
+						displayLineItems.push({
+							name: stage.stage_name,
+							quantity: 1,
+							unit_price: price,
+							total: price
+						});
+					}
+				}
+			}
+			
+			// If no stages found, fallback to service name with full amount
+			if (displayLineItems.length === 0) {
+				let serviceName: string = "Expert Witness Report";
+				if (deal?.service) {
+					try {
+						const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(deal.service))}?fields=service_name,service_type`);
+						const svc = (serviceRes as any)?.data || {};
+						serviceName = svc.service_name || svc.service_type || serviceName;
+					} catch {}
+				}
+				displayLineItems.push({ name: serviceName, description: "Quote amount", quantity: 1, unit_price: subtotal, total: subtotal });
+			}
+			
+			// Add selected addons as separate line items
 			const addonIds: number[] = Array.isArray(deal?.addons) ? deal.addons : [];
 			if (addonIds.length > 0) {
 				const idsCsv = addonIds.join(",");
@@ -375,7 +454,7 @@ export default async function ExpertWitnessReportInvoiceStep({ searchParams }: {
 					if (invoiceId) prevParams.set("invoiceId", String(invoiceId));
 					// Include paymentId when going back to step 4
 					if (paymentId) prevParams.set("paymentId", String(paymentId));
-					return `/steps/04-quote/05-expert-witness-report?${prevParams.toString()}`;
+					return `/steps/04-quote/07-expert-witness-report?${prevParams.toString()}`;
 				})()} payNowAction={payNowAction} termsLink={termsLink} privacyPolicyLink={privacyPolicyLink} />
 			</div>
 		</div>

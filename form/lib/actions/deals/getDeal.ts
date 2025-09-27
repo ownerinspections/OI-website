@@ -14,9 +14,10 @@ export type DealRecord = {
 	service?: number;
 	property?: string;
 	addons?: number[];
+	inspection_stages?: any[];
 };
 
 export async function getDeal(id: string | number): Promise<DealRecord | null> {
-	const res = await getRequest<DirectusItemResponse<DealRecord>>(`/items/os_deals/${id}`);
+	const res = await getRequest<DirectusItemResponse<DealRecord>>(`/items/os_deals/${id}?fields=*,inspection_stages`);
 	return (res as any)?.data ?? null;
 }

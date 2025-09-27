@@ -77,6 +77,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 
 	// Store estimate data for passing to QuotesForm
 	let estimateData: any = null;
+	let dealInspectionStages: any[] = [];
 	
 	// If quoteId exists in URL, call estimate API to get updated pricing
 	if (quoteId && proposal && dealId) {
@@ -87,14 +88,32 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			const propId = propertyId || (deal?.property ? String(deal.property) : undefined);
 			const property = propId ? await getProperty(propId) : null;
 			
+			// Get inspection stages from deal first, fallback to property or default
+			dealInspectionStages = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+			const selectedStageNumbers = dealInspectionStages.length > 0 
+				? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: ((property as any)?.stages || [1, 2, 3, 4, 5, 6]); // Default stages for construction
+			
 			if (service?.service_type && property) {
+				// Get all available stages from service configuration first
+				let allServiceStages: any[] = [];
+				try {
+					const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+					allServiceStages = (serviceRes as any)?.data?.stages || [];
+					console.log("[StepQuote][ConstructionStages] All service stages:", allServiceStages);
+				} catch (error) {
+					console.warn("Failed to fetch service stages:", error);
+				}
+				
 				const propertyDetails: PropertyDetails = {
 					property_category: (property?.property_category as any) || "residential",
 					bedrooms: (property as any)?.number_of_bedrooms || 0,
 					bathrooms: (property as any)?.number_of_bathrooms || 0,
 					levels: (property as any)?.number_of_levels || 0,
 					basement: Boolean((property as any)?.basement),
-					stages: (property as any)?.stages || [1, 2, 3, 4, 5, 6], // Default stages for construction
+					stages: allServiceStages.length > 0 
+						? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+						: [1, 2, 3, 4, 5, 6], // Fallback to default stages
 					area_sq: (property as any)?.area_sq || 0,
 					estimated_damage_loss: (property as any)?.estimated_damage_loss || 0,
 				};
@@ -140,10 +159,28 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		let amount = 0;
 		let note: string | undefined = undefined;
 		
+		// Get inspection stages from deal first, fallback to property or default
+		dealInspectionStages = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+		const selectedStageNumbers = dealInspectionStages.length > 0 
+			? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+			: ((property as any)?.stages || [1, 2, 3, 4, 5, 6]); // Default stages if not specified
+		
+		// Get all available stages from service configuration first
+		let allServiceStages: any[] = [];
+		try {
+			const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+			allServiceStages = (serviceRes as any)?.data?.stages || [];
+			console.log("[StepQuote][ConstructionStages][NewProposal] All service stages:", allServiceStages);
+		} catch (error) {
+			console.warn("Failed to fetch service stages:", error);
+		}
+		
 		// Use service-specific quote estimation for construction stages
 		const propertyDetails: PropertyDetails = {
 			property_category,
-			stages: (property as any)?.stages || [1, 2, 3, 4, 5, 6], // Default stages if not specified
+			stages: allServiceStages.length > 0 
+				? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: [1, 2, 3, 4, 5, 6], // Fallback to default stages
 			area_sq: (property as any)?.area_sq || 0,
 			levels: (property as any)?.number_of_levels || 0,
 		};
@@ -393,7 +430,9 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 					gstRate={gstRate} 
 					proposalStatus={statusRaw}
 					stagePrices={estimateData?.stage_prices || []}
-					preselectedStages={estimateData?.stage_prices?.map((s: any) => s.stage) || [1, 2, 3, 4, 5, 6]}
+					preselectedStages={dealInspectionStages.length > 0 
+						? dealInspectionStages.map((s: any) => Number(s.stage_number)).filter((n: number) => Number.isFinite(n))
+						: []}
 					serviceId={5}
 				/>
 			</div>

@@ -86,7 +86,17 @@ export default async function StepPhoneVerification({ searchParams }: { searchPa
 					const svcId = deal?.service as any;
 					const service = svcId ? await getServiceById(svcId) : null;
 					const propId = propertyId || (deal?.property ? String(deal.property) : undefined);
-					const property = propId ? await getProperty(propId) : null;
+					let property = null;
+					if (propId) {
+						// Handle multiple property IDs for dilapidation services
+						if (propId.includes(",")) {
+							// For multiple properties, get the first one as representative
+							const firstPropId = propId.split(",")[0].trim();
+							property = await getProperty(firstPropId);
+						} else {
+							property = await getProperty(propId);
+						}
+					}
 					const property_category = (property?.property_category as any) || "residential";
 					const service_code = service ? (service.service_type || service.service_name || "").toString() : "";
 					let amount = 0;

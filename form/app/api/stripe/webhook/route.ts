@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, APP_BASE_URL, DEAL_STAGE_PAYMENT_SUBMITTED_ID, DEAL_STAGE_PAYMENT_FAILURE_ID, FAILED_REASON_REQUIRES_CONFIRMATION, FAILED_REASON_REQUIRES_ACTION, FAILED_REASON_PROCESSING, FAILED_REASON_REQUIRES_CAPTURE } from "@/lib/env";
 import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
 import { closeDealFromInvoice } from "@/lib/actions/deals/closeDealFromInvoice";
+import { updateQuoteStatusToPaid } from "@/lib/actions/quotes/updateQuoteStatus";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -226,6 +227,9 @@ export async function POST(req: NextRequest) {
                     try { console.log("[stripe-webhook] patch invoice to paid", { invoiceId, payload }); } catch {}
                     await patchRequest(`/items/os_invoices/${encodeURIComponent(invoiceId)}`, payload);
                     try {
+                        await updateQuoteStatusToPaid(String(invoiceId));
+                    } catch {}
+                    try {
                         await closeDealFromInvoice(String(invoiceId));
                     } catch {}
                 }
@@ -247,6 +251,9 @@ export async function POST(req: NextRequest) {
                 }
                 try { console.log("[stripe-webhook] patch invoice to paid", { invoiceId, payload }); } catch {}
                 await patchRequest(`/items/os_invoices/${encodeURIComponent(invoiceId)}`, payload);
+                try {
+                    await updateQuoteStatusToPaid(String(invoiceId));
+                } catch {}
                 try {
                     await closeDealFromInvoice(String(invoiceId));
                 } catch {}

@@ -73,6 +73,76 @@ export async function createProposal(params: {
 	} catch (err) {
 		try { console.warn("[createProposal] failed to update deal stage to QUOTE_SUBMITTED", err); } catch {}
 	}
+
+	// For dilapidation services, update deal with individual property prices (excluding GST)
+	try {
+		console.log("[createProposal] Checking for dilapidation service", { propertyId: params.propertyId });
+		if (params.propertyId) {
+			// Check if this is a dilapidation service
+			const dealRes = await getRequest<{ data: { service?: string | number } }>(`/items/os_deals/${encodeURIComponent(String(params.dealId))}?fields=service`);
+			const serviceId = (dealRes as any)?.data?.service;
+			console.log("[createProposal] Deal service ID:", serviceId);
+			
+			if (serviceId) {
+				const serviceRes = await getRequest<{ data: { service_type?: string } }>(`/items/services/${encodeURIComponent(String(serviceId))}?fields=service_type`);
+				const serviceType = (serviceRes as any)?.data?.service_type;
+				console.log("[createProposal] Service type:", serviceType);
+				
+				if (serviceType === "dilapidation") {
+					console.log("[createProposal] Processing dilapidation property prices");
+					
+					// Get property IDs
+					const propertyIds = String(params.propertyId).split(",").filter((id: string) => id.trim());
+					
+					// Get individual property estimates and calculate prices
+					const propertyPriceUpdates: Record<string, string> = {};
+					
+					for (let i = 0; i < propertyIds.length; i++) {
+						const propId = propertyIds[i].trim();
+						const priceField = i === 0 ? 'price' : `price${i + 1}`;
+						
+						try {
+							// Get property details for estimation
+							const propRes = await getRequest<{ data: any }>(`/items/property/${encodeURIComponent(propId)}`);
+							const property = (propRes as any)?.data;
+							
+							if (property) {
+								// Call estimation API (same as in quote generation)
+								const estimatePayload = {
+									service: "dilapidation",
+									property_category: property.property_category || "residential",
+									bedrooms: property.number_of_bedrooms || 0,
+									bathrooms: property.number_of_bathrooms || 0,
+									levels: property.number_of_levels || 0,
+									basement: Boolean(property.basement)
+								};
+								
+								// Make estimation call to get individual property price
+								const estimateRes = await postRequest<{ quote_price?: number }>("/api/v1/quotes/estimate", estimatePayload);
+								const propertyPrice = Number(estimateRes?.quote_price || 0);
+								
+								if (propertyPrice > 0) {
+									propertyPriceUpdates[priceField] = `${propertyPrice} (excluding GST)`;
+									console.log(`[createProposal] ${priceField} = ${propertyPrice} (excluding GST, from ratesheet engine)`);
+								}
+							}
+						} catch (propError) {
+							console.warn(`[createProposal] Failed to get price for property ${propId}:`, propError);
+						}
+					}
+					
+					// Update deal with property prices
+					if (Object.keys(propertyPriceUpdates).length > 0) {
+						await patchRequest(`/items/os_deals/${encodeURIComponent(String(params.dealId))}`, propertyPriceUpdates);
+						console.log("[createProposal] Successfully updated deal with property prices:", propertyPriceUpdates);
+					}
+				}
+			}
+		}
+	} catch (error) {
+		console.error('[createProposal] Failed to update deal with property prices:', error);
+		// Don't fail the proposal creation if property price update fails
+	}
 	const now = new Date();
 	const expiry = new Date(now.getTime() + Math.max(1, PROPOSAL_EXPIRY_DAYS || 7) * 24 * 60 * 60 * 1000);
 	let contactIdStr: string | undefined = params.contactId !== undefined ? String(params.contactId) : undefined;
@@ -139,13 +209,21 @@ export async function createProposal(params: {
 		if (params.propertyId !== undefined) urlParams.set("propertyId", String(params.propertyId));
 		urlParams.set("quoteId", String(created.id));
 		
+		// Add userId if available
+		if (params.userId !== undefined) urlParams.set("userId", String(params.userId));
+		
+		// Add serviceType for proper routing
+		urlParams.set("serviceType", serviceType);
+		
 		// Use service-specific routing for the quote URL
 		const quotePath = getStepUrl(4, serviceType);
 		const fullUrl = `${base}${quotePath}?${urlParams.toString()}`;
 		const baseId = Number(created.id);
 		const sequentialId = Number.isFinite(baseId) ? String(100000 + baseId) : String(Math.floor(100000 + Math.random() * 900000));
+		
 		await patchRequest(`/items/os_proposals/${encodeURIComponent(String(created.id))}`, { quote_link: fullUrl, quote_id: sequentialId });
 	} catch (_e) {
+		console.error("[createProposal] Error in URL generation or patching:", _e);
 		// Ignore patch failures; proposal was created successfully
 	}
 

@@ -12,8 +12,10 @@ export type BookingRecord = {
     user?: string | number | null;
     contacts?: Array<string | number> | null;
     agents?: Array<string | number> | null;
+    inspectors?: Array<string | number> | null;
     status?: string | null;
     tentative_date?: string | null;
+    booking_date_and_time?: string | null;
     additional_info?: string | null;
     booking_link?: string | null;
 };
@@ -79,13 +81,42 @@ export async function ensureBooking(params: {
         if (arr.length > 0) return arr[0] as BookingRecord;
     } catch {}
 
+    // Load all contacts from deal if dealId is provided
+    let dealContactIds: Array<string> = [];
+    if (params.dealId) {
+        try {
+            console.log(`[ensureBooking] Loading contacts from deal ${params.dealId}`);
+            const contactsRes = await getRequest<{ data: Array<{ contacts_id: any }> }>(
+                `/items/os_deals_contacts?filter[os_deals_id][_eq]=${encodeURIComponent(String(params.dealId))}&fields=contacts_id.id&limit=100`
+            );
+            const contactsExpanded: any[] = Array.isArray((contactsRes as any)?.data) ? (contactsRes as any).data.map((r: any) => r.contacts_id) : [];
+            
+            // Extract contact IDs
+            for (const contact of contactsExpanded) {
+                if (typeof contact === "object" && contact?.id) {
+                    dealContactIds.push(String(contact.id));
+                }
+            }
+            console.log(`[ensureBooking] Found ${dealContactIds.length} contacts in deal: [${dealContactIds.join(', ')}]`);
+        } catch (error) {
+            console.error(`[ensureBooking] Failed to load contacts from deal ${params.dealId}:`, error);
+        }
+    }
+
+    // Include primary contact if provided and not already in deal contacts
+    const allContactIds: Array<string> = [...dealContactIds];
+    if (params.contactId && !dealContactIds.includes(String(params.contactId))) {
+        allContactIds.push(String(params.contactId));
+    }
+
     const payload: Record<string, unknown> = {
         booking_id: bookingPublicId,
         status: "submitted",
         ...(params.userId ? { user: String(params.userId) } : {}),
-        ...(params.contactId ? { contacts: [String(params.contactId)] } : {}),
+        ...(allContactIds.length > 0 ? { contacts: allContactIds } : {}),
     };
 
+    console.log(`[ensureBooking] Creating booking with ${allContactIds.length} contacts: [${allContactIds.join(', ')}]`);
     const created = await postRequest<DirectusItemResponse<BookingRecord>>("/items/bookings", payload);
     const createdBooking = (created as any)?.data as BookingRecord;
 

@@ -9,7 +9,7 @@ export type QuotingInfo = {
   property_type: "House" | "Townhouse" | "Apartment/Unit" | "Villa" | "Duplex" | "Other" | "N/A" | string;
   bedrooms_including_study: number | "N/A";
   bathrooms_rounded: number | "N/A";
-  levels: number | "N/A";
+  levels: "Single Storey" | "Double Storey" | "Triple Storey" | "N/A";
   has_basement_or_subfloor: "Yes" | "No" | "N/A";
   additional_structures: string[];
 };
@@ -196,7 +196,7 @@ export async function extractPropertyDetails(input: { address: string }): Promis
       (q?.property_type && q.property_type !== "N/A") ||
       (typeof q?.bedrooms_including_study === "number") ||
       (typeof q?.bathrooms_rounded === "number") ||
-      (typeof q?.levels === "number") ||
+      (q?.levels && q.levels !== "N/A" && typeof q?.levels === "string") ||
       (q?.has_basement_or_subfloor && q.has_basement_or_subfloor !== "N/A") ||
       (Array.isArray(q?.additional_structures) && q.additional_structures.length > 0)
     );

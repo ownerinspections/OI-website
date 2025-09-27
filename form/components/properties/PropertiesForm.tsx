@@ -73,7 +73,15 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	
 	// Additional fields for construction stages service (service 5)
 	const [areaSizeValue, setAreaSizeValue] = useState<string>(property?.area_sq ? String(property.area_sq) : "");
-	const [numberOfLevelsValue, setNumberOfLevelsValue] = useState<string>(property?.number_of_levels ? String(property.number_of_levels) : "");
+	const [numberOfLevelsValue, setNumberOfLevelsValue] = useState<string>(() => {
+		const levels = property?.number_of_levels;
+		if (!levels) return "";
+		// Map numeric levels back to text for dropdown
+		if (levels === 1) return "Single Storey";
+		if (levels === 2) return "Double Storey";
+		if (levels === 3) return "Triple Storey";
+		return "";
+	});
 
 	// Extraction loading and results
 	const [extracting, setExtracting] = useState<boolean>(false);
@@ -131,7 +139,15 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 			property_type: property?.property_type ?? "",
 			bedrooms_including_study: toNumericString(property?.number_of_bedrooms as unknown),
 			bathrooms_rounded: toNumericString(property?.number_of_bathrooms as unknown),
-			levels: toNumericString(property?.number_of_levels as unknown),
+			levels: (() => {
+				const levels = property?.number_of_levels;
+				if (!levels) return "";
+				// Map numeric levels back to text for dropdown
+				if (levels === 1) return "Single Storey";
+				if (levels === 2) return "Double Storey";
+				if (levels === 3) return "Triple Storey";
+				return "";
+			})(),
 			has_basement_or_subfloor: basementValue,
 			additional_structures: typeof property?.additional_structures === "string" ? property!.additional_structures! : "",
 		});
@@ -260,8 +276,8 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		if (isApartmentUnit) return undefined;
 		const value = quoteEditable.levels ?? "";
 		if (!value) return quotingErrors.quoting_levels ?? (showQuotingErrors ? "Required" : undefined);
-		if (!isNumericString(value)) return quotingErrors.quoting_levels ?? "Must be a number";
-		return undefined;
+		// No longer validate as numeric since it's now a dropdown with text values
+		return quotingErrors.quoting_levels;
 	})();
 	const basementError = isApartmentUnit
 		? undefined
@@ -527,16 +543,20 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 									pattern="^\\d+(\\.\\d+)?$"
 									placeholder="Enter area in square meters"
 								/>
-								<TextField
+								<SelectField
 									name="number_of_levels"
-									label="Number of Levels"
+									label="Levels"
 									value={numberOfLevelsValue}
 									onChange={(e) => setNumberOfLevelsValue(e.target.value)}
-									error={numberOfLevelsError}
 									required
-									inputMode="numeric"
-									pattern="^\\d+$"
-									placeholder="Enter number of levels"
+									error={numberOfLevelsError}
+									options={[
+										{ value: "", label: "Select" },
+										{ value: "Single Storey", label: "Single Storey" },
+										{ value: "Double Storey", label: "Double Storey" },
+										{ value: "Triple Storey", label: "Triple Storey" },
+										{ value: "N/A", label: "N/A" },
+									]}
 								/>
 							</>
 						) : null}
@@ -622,15 +642,20 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 						/>
 						{!isApartmentUnit ? (
 							<>
-								<TextField
+								<SelectField
 									name="quoting_levels"
 									label="Levels"
 									value={quoteEditable.levels ?? ""}
 									onChange={(e) => setQuoteEditable((p) => ({ ...p, levels: e.target.value }))}
-									inputMode="numeric"
-									pattern="^\\d+$"
 									required
 									error={levelsError}
+									options={[
+										{ value: "", label: "Select" },
+										{ value: "Single Storey", label: "Single Storey" },
+										{ value: "Double Storey", label: "Double Storey" },
+										{ value: "Triple Storey", label: "Triple Storey" },
+										{ value: "N/A", label: "N/A" },
+									]}
 								/>
 								<SelectField
 									name="quoting_has_basement_or_subfloor"
@@ -658,8 +683,8 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 								</div>
 							</>
 						) : null}
-						{/* Read-only client info preview */}
-						{clientInfo ? (
+						{/* Read-only client info preview - hidden for apartment pre-settlement service */}
+						{clientInfo && serviceId !== 4 ? (
 							<div style={{ gridColumn: "1 / -1", background: "#f5f5f5", border: "1px solid var(--color-light-gray)", borderRadius: 6, padding: 12, margin: "8px 0" }}>
 								<div style={{ marginBottom: 6, color: "var(--color-text-secondary)" }}>
 									<strong>Client info</strong>

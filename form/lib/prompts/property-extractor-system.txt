@@ -4,7 +4,7 @@ Follow these rules:
 1. Australian English, metric units.
 2. Only use information you can attribute to a public source. No guessing. If unknown, return "N/A".
 3. Bathrooms: if a listing shows a half bathroom or WC only, return the bathroom count rounded up to the next whole number.
-4. Levels: map to integer where Single=1, Double=2, Triple=3. If split level or multi-storey, return the closest integer and include a note in free_text_notes.
+4. Levels: return text labels "Single Storey", "Double Storey", or "Triple Storey". If split level or multi-storey, return the closest match and include a note in free_text_notes.
 5. Property classification: Residential or Commercial.
 6. Property type: one of House, Townhouse, Apartment/Unit, Villa, Duplex, Other.
 7. Basement/subfloor: return Yes if any of basement parking, basement, undercroft, subfloor crawlspace is indicated. Otherwise No or "N/A" if not determinable.
@@ -22,7 +22,7 @@ Output must always follow this schema:
     "property_type": "House | Townhouse | Apartment/Unit | Villa | Duplex | Other",
     "bedrooms_including_study": <int or "N/A">,
     "bathrooms_rounded": <int or "N/A">,
-    "levels": <int or "N/A">,
+    "levels": "Single Storey | Double Storey | Triple Storey | N/A",
     "has_basement_or_subfloor": "Yes | No | N/A",
     "additional_structures": ["Shed", "Granny flat"]
   },

@@ -85,8 +85,9 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 		}
 	}, [normalized, required, hasInteracted]);
 
-	// Show server error if present, otherwise show client validation error
-	const displayError = error || clientError;
+	// Show server error if present, but clear it if user has fixed the field
+	// Only show server error if user hasn't interacted or field is still invalid
+	const displayError = (error && (!hasInteracted || clientError)) ? error : clientError;
 
 	const labelStyle: React.CSSProperties = {
 		display: "block",

@@ -151,17 +151,25 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 				});
 
 				if (totalEstimateAmount > 0) {
-					// Update the deal with total estimate
+					// Update the deal with total estimate and individual property prices
 					try {
 						const dealUpdateData: any = {
 							deal_value: totalEstimateAmount,
 						};
 						
-						console.log("[StepQuote] Updating deal with total estimate", { dealId, dealValue: totalEstimateAmount });
+						// Add individual property prices from ratesheet engine (without modification)
+						for (let i = 0; i < allPropertyEstimates.length; i++) {
+							const priceField = i === 0 ? 'price' : `price${i + 1}`;
+							const propertyPrice = allPropertyEstimates[i].amount;
+							dealUpdateData[priceField] = `${propertyPrice} (excluding GST)`;
+							console.log(`[StepQuote] ${priceField} = ${propertyPrice} (excluding GST, from ratesheet engine)`);
+						}
+						
+						console.log("[StepQuote] Updating deal with total estimate and property prices", { dealId, dealValue: totalEstimateAmount, propertyPrices: dealUpdateData });
 						await updateDeal(dealId, dealUpdateData);
-						console.log("[StepQuote] Deal updated successfully with total estimate");
+						console.log("[StepQuote] Deal updated successfully with total estimate and property prices");
 					} catch (dealUpdateError) {
-						console.warn("[StepQuote] Failed to update deal with total estimate:", dealUpdateError);
+						console.warn("[StepQuote] Failed to update deal with total estimate and property prices:", dealUpdateError);
 					}
 
 					// Update each property with any missing details

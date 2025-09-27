@@ -2,10 +2,18 @@ import FormHeader from "@/components/ui/FormHeader";
 import NoteBox from "@/components/ui/messages/NoteBox";
 import { getRequest } from "@/lib/http/fetcher";
 import { getThankYouNote } from "@/lib/actions/globals/getGlobal";
+import ViewBookingButton from "@/components/ui/ViewBookingButton";
+import ClosePageButton from "@/components/ui/ClosePageButton";
 
 export default async function StepThankYou({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
     const params = (await searchParams) ?? {};
     const bookingId = typeof params.bookingId === "string" ? params.bookingId : undefined;
+    const userId = typeof params.userId === "string" ? params.userId : undefined;
+    const contactId = typeof params.contactId === "string" ? params.contactId : undefined;
+    const dealId = typeof params.dealId === "string" ? params.dealId : undefined;
+    const propertyId = typeof params.propertyId === "string" ? params.propertyId : undefined;
+    const quoteId = typeof params.quoteId === "string" ? params.quoteId : undefined;
+    const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
     let bookingHumanId: string | number | undefined = undefined;
     let bookingStatus: string | undefined = undefined;
     if (bookingId) {
@@ -35,12 +43,24 @@ export default async function StepThankYou({ searchParams }: { searchParams?: Pr
                     </NoteBox>
                 ) : null}
                 <div style={{ textAlign: "center" }}>
-                    <h1 style={{ margin: 0, fontSize: 24, color: "var(--color-primary)" }}>Your Inspection has been booked</h1>
+                    <h1 style={{ margin: 0, fontSize: 24, color: "var(--color-primary)" }}>Thank you for booking with us!</h1>
                     <p style={{ color: "var(--color-text-secondary)", marginTop: 8 }}>
-                        We've received your booking. Our team will contact you shortly to confirm the details and inspection date/time.
+                        <strong>Your inspection booking has been successfully received. Our team will contact you shortly to confirm the inspection details and date/time.</strong>
                     </p>
                     <div style={{ marginTop: 16, color: "var(--color-dark-gray)", fontSize: 14 }}>
-                        A confirmation has been recorded. You may close this page now.
+                        You may close this page now.
+                    </div>
+                    <div className="button-container" style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 16 }}>
+                        <ClosePageButton />
+                        <ViewBookingButton 
+                            bookingId={bookingId}
+                            userId={userId}
+                            contactId={contactId}
+                            dealId={dealId}
+                            propertyId={propertyId}
+                            quoteId={quoteId}
+                            invoiceId={invoiceId}
+                        />
                     </div>
                 </div>
             </div>

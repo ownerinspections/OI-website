@@ -2,7 +2,7 @@
 
 import { createProperty } from "@/lib/actions/properties/createProperty";
 import { updateProperty } from "@/lib/actions/properties/updateProperty";
-import { createAgentsForProperty } from "@/lib/actions/agents/createAgent";
+import { createAgentContactsForDeal } from "@/lib/actions/contacts/createAgentContacts";
 
 export type SubmitResult = {
 	success?: boolean;
@@ -114,9 +114,10 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 		if (quoting_bathrooms_rounded && !/^\d+$/.test(quoting_bathrooms_rounded)) {
 			errors[`property_${index}_quoting_bathrooms_rounded`] = "Must be a number";
 		}
-		if (quoting_levels && !/^\d+$/.test(quoting_levels)) {
-			errors[`property_${index}_quoting_levels`] = "Must be a number";
-		}
+		// Remove numeric validation for levels since it's now a dropdown with text values
+		// if (quoting_levels && !/^\d+$/.test(quoting_levels)) {
+		//	errors[`property_${index}_quoting_levels`] = "Must be a number";
+		// }
 
 		properties.push({
 			id: property_id || undefined,
@@ -145,9 +146,31 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 
 	try {
 		const createdPropertyIds: string[] = [];
+		const allAgents: Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }> = [];
+
+		// Helper function to map levels text to numbers
+		const mapLevelsToNumber = (levels: string): number | null => {
+			if (!levels || levels === "N/A") return null;
+			switch (levels) {
+				case "Single Storey":
+					return 1;
+				case "Double Storey":
+					return 2;
+				case "Triple Storey":
+					return 3;
+				default:
+					// If it's already a number, parse it
+					const numLevels = Number(levels);
+					return isNaN(numLevels) ? null : numLevels;
+			}
+		};
 
 		// Process each property
-		for (const property of properties) {
+		for (let i = 0; i < properties.length; i++) {
+			const property = properties[i];
+			// Determine the property field name based on index
+			const propertyFieldName = i === 0 ? 'properties' : `properties${i + 1}`;
+			
 			// Build payload with available keys
 			const payload: Record<string, unknown> = {
 				// Address
@@ -160,7 +183,7 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 				// Quoting-derived fields mapped to backend keys
 				number_of_bedrooms: property.quoting_bedrooms_including_study ? Number(property.quoting_bedrooms_including_study) : null,
 				number_of_bathrooms: property.quoting_bathrooms_rounded ? Number(property.quoting_bathrooms_rounded) : null,
-				number_of_levels: property.quoting_levels ? Number(property.quoting_levels) : null,
+				number_of_levels: property.quoting_levels ? mapLevelsToNumber(property.quoting_levels) : null,
 				property_category: property.quoting_property_classification ? property.quoting_property_classification.toLowerCase() : null,
 				property_type: property.quoting_property_type || null,
 				basement: property.quoting_has_basement_or_subfloor
@@ -186,12 +209,12 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 			if (resultingPropertyId) {
 				createdPropertyIds.push(resultingPropertyId);
 
-				// Create agents for this property if any
+				// Collect agents from this property (don't create them yet)
 				if (property.agents_json) {
 					try {
 						const agents = JSON.parse(property.agents_json);
 						if (Array.isArray(agents) && agents.length > 0) {
-							await createAgentsForProperty(resultingPropertyId, agents);
+							allAgents.push(...agents);
 						}
 					} catch (e) {
 						console.warn(`[submitDilapidationProperties] Failed to parse agents for property ${resultingPropertyId}:`, e);
@@ -202,6 +225,54 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 
 		console.log(`[submitDilapidationProperties] Successfully created/updated ${createdPropertyIds.length} properties:`, createdPropertyIds);
 		console.log(`[submitDilapidationProperties] All property IDs to be added to URL:`, createdPropertyIds.join(","));
+
+		// Update deal with property IDs in different fields (properties, properties2, properties3, etc.)
+		if (createdPropertyIds.length > 0 && deal_id) {
+			try {
+				const { updateDeal } = await import("@/lib/actions/deals/updateDeal");
+				const dealUpdatePayload: Record<string, any> = {};
+				
+				// Assign each property ID to its corresponding field using proper one-to-many structure
+				for (let i = 0; i < createdPropertyIds.length; i++) {
+					const fieldName = i === 0 ? 'properties' : `properties${i + 1}`;
+					dealUpdatePayload[fieldName] = [createdPropertyIds[i]];
+				}
+				
+				await updateDeal(deal_id, dealUpdatePayload);
+				console.log("[submitDilapidationProperties] Successfully updated deal with property IDs:", dealUpdatePayload);
+			} catch (e) {
+				console.error("[submitDilapidationProperties] Failed to update deal with property IDs:", e);
+				// Don't fail the entire submission if deal update fails
+			}
+		}
+
+		// Create agent contacts linked to deal and user (instead of linking to properties)
+		if (allAgents.length > 0 && deal_id && user_id) {
+			try {
+				console.log("[submitDilapidationProperties] Creating agent contacts for deal:", deal_id, "user:", user_id, "agents:", allAgents.length);
+				
+				// Remove duplicates based on email
+				const uniqueAgents = allAgents.reduce((acc, agent) => {
+					const email = (agent.email || "").trim();
+					if (email && email !== "N/A") {
+						// Use email as key to prevent duplicates
+						if (!acc.find(a => (a.email || "").trim().toLowerCase() === email.toLowerCase())) {
+							acc.push(agent);
+						}
+					} else if (agent.first_name || agent.last_name || agent.mobile) {
+						// Include agents without email if they have other info
+						acc.push(agent);
+					}
+					return acc;
+				}, [] as Array<{ first_name?: string; last_name?: string; mobile?: string; email?: string }>);
+				
+				await createAgentContactsForDeal(deal_id, user_id, uniqueAgents);
+				console.log("[submitDilapidationProperties] Successfully created", uniqueAgents.length, "unique agent contacts");
+			} catch (e) {
+				console.error("[submitDilapidationProperties] Failed to create agent contacts:", e);
+				// Don't fail the entire submission if agent creation fails
+			}
+		}
 
 		const next = new URL("/steps/03-phone-verification", "http://localhost");
 		if (user_id) next.searchParams.set("userId", user_id);

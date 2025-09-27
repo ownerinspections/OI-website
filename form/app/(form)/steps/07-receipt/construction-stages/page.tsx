@@ -1,6 +1,7 @@
 import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
 import { ensureBooking } from "@/lib/actions/bookings/createBooking";
 import { closeDealFromInvoice } from "@/lib/actions/deals/closeDealFromInvoice";
+import { updateQuoteStatusToPaid } from "@/lib/actions/quotes/updateQuoteStatus";
 import Stripe from "stripe";
 import { STRIPE_SECRET_KEY, APP_BASE_URL, DIRECTUS_APP_URL, APP_DASHBOARD_URL, DEAL_STAGE_PAYMENT_SUBMITTED_ID, DEAL_STAGE_PAYMENT_FAILURE_ID, FAILED_REASON_REQUIRES_CONFIRMATION, FAILED_REASON_REQUIRES_ACTION, FAILED_REASON_PROCESSING, FAILED_REASON_REQUIRES_CAPTURE } from "@/lib/env";
 import { fetchCompanyInfo, fetchCustomerInfo, fetchPropertyInfo, CustomerInfo, CompanyInfo, PropertyInfo } from "@/lib/actions/invoices/createInvoice";
@@ -179,6 +180,9 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
             try { console.log("[invoice][construction-stages-receipt-ssr-prg] Marking invoice paid", { invoiceId, amountPaid: paymentAmountAud }); } catch {}
             try {
                 await patchRequest(`/items/os_invoices/${encodeURIComponent(String(invoiceId))}`, { status: "paid", amount_paid: paymentAmountAud });
+            } catch {}
+            try {
+                await updateQuoteStatusToPaid(String(invoiceId));
             } catch {}
             try {
                 await closeDealFromInvoice(String(invoiceId));
@@ -430,6 +434,9 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
             await patchRequest(`/items/os_invoices/${encodeURIComponent(String(invoiceId))}`, { status: "paid", amount_paid: paidAmount ?? undefined });
         } catch {}
         try {
+            await updateQuoteStatusToPaid(String(invoiceId));
+        } catch {}
+        try {
             await closeDealFromInvoice(String(invoiceId));
         } catch {}
     }
@@ -477,40 +484,6 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
                     </div>
                     <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
                         <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
-                        {property ? (
-                            <div style={{ lineHeight: 1.5 }}>
-                                {/* Full Address */}
-                                <div style={{ marginBottom: 8 }}>
-                                    {(() => {
-                                        const addressParts = [];
-                                        if (property.street_address) addressParts.push(property.street_address);
-                                        if (property.suburb) addressParts.push(property.suburb);
-                                        if (property.state) addressParts.push(property.state);
-                                        if (property.post_code) addressParts.push(property.post_code);
-                                        return addressParts.join(', ');
-                                    })()}
-                                </div>
-                                {/* Property Details */}
-                                {property.property_category && <div>Category: {property.property_category}</div>}
-                                {property.property_type && <div>Type: {property.property_type}</div>}
-                                {property.area_sq && <div>Floor Area: {property.area_sq} sqm</div>}
-                                {property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
-                                {property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
-                                {property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
-                                {property.land_size && <div>Land Size: {property.land_size}</div>}
-                                {property.basement && <div>Basement: Yes</div>}
-                                {property.termite_risk && <div>Termite Risk: {property.termite_risk}</div>}
-                            </div>
-                        ) : (
-                            <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Payment Information */}
-                <div className="receipt-payment-section">
-                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
-                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Transaction Details:</h3>
                         <div style={{ lineHeight: 1.5 }}>
                             <div style={{ fontWeight: 600, marginBottom: 4 }}>Transaction ID</div>
                             <div style={{ color: "var(--color-text-secondary)" }}>
@@ -518,15 +491,43 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
                             </div>
                         </div>
                     </div>
-                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
-                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Payment Method:</h3>
+                </div>
+
+                {/* Property Details - Full Width */}
+                <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
+                    <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
+                    {property ? (
                         <div style={{ lineHeight: 1.5 }}>
-                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Card Details</div>
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                                {paymentMethodSummary || (isPaid ? "Paid via Stripe" : "Payment failed")}
+                            {/* Full Address - Single Column */}
+                            <div style={{ marginBottom: 16 }}>
+                                {(() => {
+                                    const addressParts = [];
+                                    if (property.street_address) addressParts.push(property.street_address);
+                                    if (property.suburb) addressParts.push(property.suburb);
+                                    if (property.state) addressParts.push(property.state);
+                                    if (property.post_code) addressParts.push(property.post_code);
+                                    return addressParts.join(', ');
+                                })()}
+                            </div>
+                            {/* Property Details - Two Columns */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div>
+                                    {property.property_category && <div>Category: {property.property_category}</div>}
+                                    {property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
+                                    {property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
+                                    {property.land_size && <div>Land Size: {property.land_size}</div>}
+                                </div>
+                                <div>
+                                    {property.property_type && <div>Type: {property.property_type}</div>}
+                                    {property.area_sq && <div>Floor Area: {property.area_sq} sqm</div>}
+                                    {property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
+                                    {property.basement && <div>Basement: Yes</div>}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
+                    )}
                 </div>
 
                 {/* Receipt Section */}
@@ -599,7 +600,7 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
                         if (invoice?.id) sp.set("invoiceId", String(invoice.id));
                         if (booking?.id) sp.set("bookingId", String(booking.id));
 
-                        redirect(`/steps/08-booking/construction-stages?${sp.toString()}`);
+                        redirect(`/steps/08-booking?${sp.toString()}`);
                     }}>
                         <button type="submit" className="button-primary">Book Now</button>
                     </form>

@@ -154,21 +154,6 @@ services:
     networks:
       - ownerinspections-network
 
-  form:
-    build:
-      context: ./form
-      dockerfile: Dockerfile
-    container_name: form-app
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-    ports:
-      - "8030:8030"
-    depends_on:
-      - kong
-    networks:
-      - ownerinspections-network
-
   nginx:
     image: nginx:alpine
     container_name: nginx
@@ -179,8 +164,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./form/out:/usr/share/nginx/html/form:ro
     depends_on:
-      - form
+      - kong
     networks:
       - ownerinspections-network
 

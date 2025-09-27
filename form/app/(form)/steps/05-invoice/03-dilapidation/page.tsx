@@ -107,9 +107,17 @@ export default async function DilapidationInvoiceStep({ searchParams }: { search
 	let displayLineItems: Array<{ name: string; description?: string; quantity: number; unit_price: number; total: number }> = [];
 	try {
 		if (dealId) {
-			// Fetch service id and addon ids from deal
-			const dealRes = await getRequest<{ data: { service?: string | number; addons?: number[] } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service,addons`);
-			const deal = (dealRes as any)?.data || {};
+			// Fetch deal data including property-specific price and addon fields
+			let deal: any = {};
+			try {
+				const dealRes = await getRequest<{ data: any }>(`/items/os_deals/${encodeURIComponent(String(dealId))}`);
+				deal = (dealRes as any)?.data || {};
+				console.log("[DilapidationInvoice] Deal data fetched:", Object.keys(deal));
+			} catch (error) {
+				console.error("[DilapidationInvoice] Failed to fetch deal data:", error);
+				deal = {};
+			}
+			
 			// Resolve service name
 			let serviceName: string = "Dilapidation Inspection";
 			if (deal?.service) {
@@ -119,20 +127,128 @@ export default async function DilapidationInvoiceStep({ searchParams }: { search
 					serviceName = svc.service_name || svc.service_type || serviceName;
 				} catch {}
 			}
-			// First line: service, using quote subtotal
-			displayLineItems.push({ name: serviceName, description: "Quote amount", quantity: 1, unit_price: subtotal, total: subtotal });
-			// Resolve addons
-			const addonIds: number[] = Array.isArray(deal?.addons) ? deal.addons : [];
-			if (addonIds.length > 0) {
-				const idsCsv = addonIds.join(",");
+			
+			// Get property information to determine how many properties we have
+			const propertyIds = propertyId ? propertyId.split(",").filter(id => id.trim()) : [];
+			const propertyCount = Math.max(1, propertyIds.length);
+			
+			// Create line items for each property
+			for (let i = 0; i < propertyCount; i++) {
+				const priceField = i === 0 ? 'price' : `price${i + 1}`;
+				const addonsField = i === 0 ? 'addons' : `addons${i + 1}`;
+				
+				// Safely access property price from deal as-is
+				let propertyPrice: string | number = 0;
 				try {
-					const addonsRes = await getRequest<{ data: any[] }>(`/items/addons?filter%5Bid%5D%5B_in%5D=${encodeURIComponent(idsCsv)}`);
-					const addons = ((addonsRes as any)?.data ?? []) as any[];
-					for (const a of addons) {
-						const price = Number(a.price ?? a.amount ?? 0);
-						displayLineItems.push({ name: a.name || a.addon_name || a.title || `Addon ${a.id}`, description: "Addon", quantity: 1, unit_price: price, total: price });
+					// We store prices as strings like "750 (excluding GST)" in deal.price, deal.price2, etc.
+					propertyPrice = deal?.[priceField] || 0;
+					console.log(`[DilapidationInvoice] ${priceField} from deal:`, propertyPrice);
+				} catch (e) {
+					console.warn(`[DilapidationInvoice] Failed to access ${priceField}:`, e);
+				}
+				
+				// Safely access property addons
+				let propertyAddons: number[] = [];
+				try {
+					propertyAddons = Array.isArray(deal?.[addonsField]) ? deal[addonsField] : [];
+				} catch (e) {
+					console.warn(`[DilapidationInvoice] Failed to access ${addonsField}:`, e);
+				}
+				
+				console.log(`[DilapidationInvoice] Property ${i + 1}:`, { priceField, propertyPrice, addonsField, propertyAddons });
+				
+				// Add property base price line item
+				const numericPrice = typeof propertyPrice === 'string' 
+					? (propertyPrice.match(/^(\d+(?:\.\d+)?)/) ? Number(propertyPrice.match(/^(\d+(?:\.\d+)?)/)?.[1]) : 0)
+					: Number(propertyPrice);
+				
+				if (numericPrice > 0) {
+					// Get property address for description by fetching from property ID
+					const propertyAddress = await (async () => {
+						try {
+							const propertyIds = propertyId ? propertyId.split(",").filter(id => id.trim()) : [];
+							const propId = propertyIds[i];
+							if (propId) {
+								// Fetch property directly by ID to get address
+								const propRes = await getRequest<{ data: any }>(`/items/property/${encodeURIComponent(propId)}?fields=full_address`);
+								const propData = (propRes as any)?.data;
+								return propData?.full_address || `Property ${i + 1}`;
+							}
+							return `Property ${i + 1}`;
+						} catch (e) {
+							console.warn(`[DilapidationInvoice] Failed to fetch address for property ${i + 1}:`, e);
+							return `Property ${i + 1}`;
+						}
+					})();
+					
+					displayLineItems.push({ 
+						name: serviceName, 
+						description: propertyAddress, 
+						quantity: 1, 
+						unit_price: numericPrice, 
+						total: numericPrice 
+					});
+				}
+				
+				// Add property-specific addons
+				if (propertyAddons.length > 0) {
+					const idsCsv = propertyAddons.join(",");
+					try {
+						const addonsRes = await getRequest<{ data: any[] }>(`/items/addons?filter%5Bid%5D%5B_in%5D=${encodeURIComponent(idsCsv)}`);
+						const addons = ((addonsRes as any)?.data ?? []) as any[];
+						for (const a of addons) {
+							const price = Number(a.price ?? a.amount ?? 0);
+							
+							// Get property address for addon description by fetching from property ID
+							const propertyAddress = await (async () => {
+								try {
+									const propertyIds = propertyId ? propertyId.split(",").filter(id => id.trim()) : [];
+									const propId = propertyIds[i];
+									if (propId) {
+										// Fetch property directly by ID to get address
+										const propRes = await getRequest<{ data: any }>(`/items/property/${encodeURIComponent(propId)}?fields=full_address`);
+										const propData = (propRes as any)?.data;
+										return propData?.full_address || `Property ${i + 1}`;
+									}
+									return `Property ${i + 1}`;
+								} catch (e) {
+									console.warn(`[DilapidationInvoice] Failed to fetch address for addon property ${i + 1}:`, e);
+									return `Property ${i + 1}`;
+								}
+							})();
+							
+							displayLineItems.push({ 
+								name: a.name || a.addon_name || a.title || `Addon ${a.id}`, 
+								description: propertyAddress, 
+								quantity: 1, 
+								unit_price: price, 
+								total: price 
+							});
+						}
+					} catch (addonError) {
+						console.warn(`[DilapidationInvoice] Failed to fetch addons for property ${i + 1}:`, addonError);
 					}
-				} catch {}
+				}
+			}
+			
+			// Fallback: if no property-specific data found, use the old approach
+			if (displayLineItems.length === 0) {
+				console.log("[DilapidationInvoice] No property-specific data found, using fallback");
+				displayLineItems.push({ name: serviceName, description: "Quote amount", quantity: 1, unit_price: subtotal, total: subtotal });
+				
+				// Try general addons as fallback
+				const generalAddons: number[] = Array.isArray(deal?.addons) ? deal.addons : [];
+				if (generalAddons.length > 0) {
+					const idsCsv = generalAddons.join(",");
+					try {
+						const addonsRes = await getRequest<{ data: any[] }>(`/items/addons?filter%5Bid%5D%5B_in%5D=${encodeURIComponent(idsCsv)}`);
+						const addons = ((addonsRes as any)?.data ?? []) as any[];
+						for (const a of addons) {
+							const price = Number(a.price ?? a.amount ?? 0);
+							displayLineItems.push({ name: a.name || a.addon_name || a.title || `Addon ${a.id}`, description: "Addon", quantity: 1, unit_price: price, total: price });
+						}
+					} catch {}
+				}
 			}
 		}
 	} catch {}

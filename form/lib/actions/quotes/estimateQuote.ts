@@ -147,7 +147,7 @@ export async function estimateDefectsInvestigationQuote(property: PropertyDetail
 	const payload = {
 		service: "defects_investigation",
 		property_category: property.property_category,
-		stages: property.stages && property.stages.length > 0 ? property.stages : [1, 2]
+		stages: property.stages && property.stages.length > 0 ? property.stages : [1, 2, 3]
 	};
 	
 	return await callServiceEstimateAPI("defects-investigation", payload);

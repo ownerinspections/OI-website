@@ -104,6 +104,8 @@ type Props = {
 };
 
 export default function QuotesForm({ quote, dealId, contactId, propertyId, invoiceId, paymentId, quoteNote, addons, termiteRisk, termiteRiskReason, preselectedAddonIds, userId, gstRate, proposalStatus, stagePrices, preselectedStages, estimatedDamageLoss, onEstimatedDamageLossChange, showInspectionBox = true, propertyCategory = "residential", serviceId }: Props) {
+	// Check if quote is paid and should be read-only
+	const isReadOnly = proposalStatus === "paid";
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const headerStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 };
 	const headerLeftSpacerStyle: React.CSSProperties = { flex: 1 };
@@ -130,7 +132,12 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	const [selectedStages, setSelectedStages] = React.useState<Record<number, boolean>>(() => {
 		const map: Record<number, boolean> = {};
 		(stagePrices || []).forEach((s) => {
-			map[s.stage] = Array.isArray(preselectedStages) ? preselectedStages.includes(s.stage) : true; // Default to true for stages
+			// For expert witness reports, stages 2 and 3 default to false and cannot be turned on
+			if (serviceId === 7 && (s.stage === 2 || s.stage === 3)) {
+				map[s.stage] = false;
+			} else {
+				map[s.stage] = Array.isArray(preselectedStages) ? preselectedStages.includes(s.stage) : true; // Default to true for other stages
+			}
 		});
 		return map;
 	});
@@ -185,7 +192,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 						try {
 							const propertyDetails: PropertyDetails = {
 								property_category: propertyCategory as "residential" | "commercial",
-								stages: [1, 2],
+								stages: [1, 2, 3],
 								estimated_damage_loss: newValue
 							};
 							
@@ -217,10 +224,26 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	const baseAmount = React.useMemo(() => {
 		const pricesToUse = currentStagePrices.length > 0 ? currentStagePrices : (stagePrices || []);
 		if (pricesToUse.length > 0) {
-			return pricesToUse.reduce((sum, s) => (selectedStages[s.stage] ? sum + Number(s.price || 0) : sum), 0);
+			return pricesToUse.reduce((sum, s) => {
+				if (!selectedStages[s.stage]) return sum;
+				
+				const basePrice = Number(s.price || 0);
+				const stageName = stageNames[s.stage]?.toLowerCase() || '';
+				
+				// Check if this is Document review or Inspection stage for expert witness reports
+				const isDocumentReview = stageName.includes('document') && stageName.includes('review');
+				const isInspectionStage = stageName.includes('inspection') && stageName.includes('stage');
+				
+				// Multiply by 7 for Document review and Inspection stage in expert witness reports
+				if (serviceId === 7 && (isDocumentReview || isInspectionStage)) {
+					return sum + (basePrice * 7);
+				}
+				
+				return sum + basePrice;
+			}, 0);
 		}
 		return Number((quote as any)?.inspection_amount ?? (quote as any)?.quote_amount ?? quote?.amount ?? 0);
-	}, [currentStagePrices, stagePrices, selectedStages, quote]);
+	}, [currentStagePrices, stagePrices, selectedStages, quote, serviceId, stageNames]);
 
 	const addonsTotal = (addons || []).reduce((sum, a) => (selected[a.id] ? sum + Number(a.price || 0) : sum), 0);
 	const subtotalExcludingGst = baseAmount + addonsTotal;
@@ -250,13 +273,20 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					.map(([stage]) => Number(stage))
 					.filter((n) => Number.isFinite(n));
 
+				// Get stage prices for selected stages
+				const pricesToUse = currentStagePrices.length > 0 ? currentStagePrices : (stagePrices || []);
+				const selectedStagePrices = pricesToUse
+					.filter(s => selectedStages[s.stage])
+					.map(s => ({ stage: s.stage, price: s.price }));
+
 				await fetch(`/api/proposals/${encodeURIComponent(String(id))}/total`, {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ 
 						total, 
 						addons: selectedAddonIds,
-						stages: selectedStageNumbers
+						stages: selectedStageNumbers,
+						stagePrices: selectedStagePrices
 					}),
 					cache: "no-store",
 				});
@@ -290,6 +320,14 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					<div>{quoteNote ?? quote?.quote_note}</div>
 				</NoteBox>
 			) : null}
+			{isReadOnly && (
+				<InfoBox style={{ marginBottom: 16 }}>
+					<div>
+						<div style={{ fontWeight: 600 }}>Quote Finalized</div>
+						<div style={{ fontSize: 12, marginTop: 2 }}>This quote has been paid and is now read-only. No changes can be made.</div>
+					</div>
+				</InfoBox>
+			)}
 			{Array.isArray(currentStagePrices) && currentStagePrices.length > 0 ? (
 				<div style={{ marginTop: 8, marginBottom: 8 }}>
 					{showInspectionBox && (
@@ -316,7 +354,9 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 											// Remove commas and parse the number
 											const numericValue = e.target.value.replace(/,/g, '');
 											const parsedValue = Number(numericValue) || 0;
-											handleEstimatedDamageLossChange(parsedValue);
+											if (!isReadOnly) {
+												handleEstimatedDamageLossChange(parsedValue);
+											}
 										}}
 										style={{
 											width: "100%",
@@ -325,8 +365,8 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 											borderRadius: 4,
 											fontSize: 14
 										}}
-										placeholder="Enter estimated damage loss"
-										disabled={isUpdatingQuote}
+											placeholder="Enter estimated damage loss"
+											disabled={isUpdatingQuote || isReadOnly}
 									/>
 									<span style={{ 
 										position: "absolute", 
@@ -347,14 +387,18 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					<InfoBox>
 						<div>
 							<div style={{ fontWeight: 600 }}>Inspection Stages</div>
-							<div style={{ fontSize: 12, marginTop: 2 }}>Select which stages you'd like to include in your inspection. Toggle items below on or off — totals update automatically.</div>
+							<div style={{ fontSize: 12, marginTop: 2 }}>{isReadOnly ? "Selected stages for your inspection." : "Select which stages you'd like to include in your inspection. Toggle items below on or off — totals update automatically."}</div>
 						</div>
 					</InfoBox>
 					<div>
 						{currentStagePrices.map((s) => (
 							<div key={s.stage} style={addonRowStyle}>
 					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-						<Toggle checked={Boolean(selectedStages[s.stage])} onChange={(next) => setSelectedStages((prev) => ({ ...prev, [s.stage]: next }))} />
+						<Toggle 
+							checked={Boolean(selectedStages[s.stage])} 
+							onChange={(next) => !isReadOnly && setSelectedStages((prev) => ({ ...prev, [s.stage]: next }))} 
+							disabled={isReadOnly || (serviceId === 7 && (s.stage === 2 || s.stage === 3))}
+						/>
 						{serviceId ? (
 							<StageTooltip serviceId={serviceId} stageNumber={s.stage}>
 								<span style={addonNameStyle}>
@@ -368,7 +412,29 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 							<span style={addonNameStyle}>Stage {s.stage}</span>
 						)}
 					</div>
-								<span style={addonPriceStyle}>{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(s.price || 0)}</span>
+								<span style={addonPriceStyle}>
+									{(() => {
+										const basePrice = s.price || 0;
+										const stageName = stageNames[s.stage]?.toLowerCase() || '';
+										
+										// Check if this is Document review or Inspection stage for expert witness reports
+										const isDocumentReview = stageName.includes('document') && stageName.includes('review');
+										const isInspectionStage = stageName.includes('inspection') && stageName.includes('stage');
+										
+										if (serviceId === 7 && (isDocumentReview || isInspectionStage)) {
+											const finalPrice = basePrice * 7;
+											return `7 x ${new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(basePrice)}/hr = ${new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(finalPrice)}`;
+										}
+										
+										// Default display for other stages
+										return (
+											<>
+												{new Intl.NumberFormat("en-AU", { style: "currency", currency: quote?.currency || "AUD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(basePrice)}
+												{serviceId === 7 && "/hr"}
+											</>
+										);
+									})()}
+								</span>
 							</div>
 						))}
 					</div>
@@ -388,7 +454,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 					<InfoBox>
 						<div>
 							<div style={{ fontWeight: 600 }}>Optional add-ons</div>
-							<div style={{ fontSize: 12, marginTop: 2 }}>Add extra services to tailor your quote. Toggle items below on or off — totals update automatically.</div>
+							<div style={{ fontSize: 12, marginTop: 2 }}>{isReadOnly ? "Selected add-on services for your quote." : "Add extra services to tailor your quote. Toggle items below on or off — totals update automatically."}</div>
 						</div>
 					</InfoBox>
 					{(() => {
@@ -410,7 +476,11 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 						{addons.map((a) => (
 							<div key={a.id} style={addonRowStyle}>
 								<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-									<Toggle checked={Boolean(selected[a.id])} onChange={(next) => setSelected((prev) => ({ ...prev, [a.id]: next }))} />
+									<Toggle 
+										checked={Boolean(selected[a.id])} 
+										onChange={(next) => !isReadOnly && setSelected((prev) => ({ ...prev, [a.id]: next }))} 
+										disabled={isReadOnly}
+									/>
 									<AddonTooltip addonId={a.id}>
 										<span style={addonNameStyle}>{a.name}</span>
 									</AddonTooltip>
@@ -439,7 +509,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 			</div>
 
 
-			{proposalStatus !== "approved" && (
+			{proposalStatus !== "paid" && (
 				<div style={actionsStyle}>
 					<PreviousButton href={prevHref} />
 					<button 

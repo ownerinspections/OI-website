@@ -2,7 +2,7 @@
 
 import { createProperty } from "@/lib/actions/properties/createProperty";
 import { updateProperty } from "@/lib/actions/properties/updateProperty";
-import { createAgentsForProperty } from "@/lib/actions/agents/createAgent";
+import { createAgentContactsForDeal } from "@/lib/actions/contacts/createAgentContacts";
 
 export type SubmitResult = {
 	success?: boolean;
@@ -134,9 +134,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 		if (quoting_bathrooms_rounded && !/^\d+$/.test(quoting_bathrooms_rounded)) {
 			errors.quoting_bathrooms_rounded = "Must be a number";
 		}
-		if (quoting_levels && !/^\d+$/.test(quoting_levels)) {
-			errors.quoting_levels = "Must be a number";
-		}
+	// No longer validate quoting_levels as numeric since it's now a dropdown with text values
 	}
 
 	// Services that need basic property category/type fields (5, 6, 7, 8)
@@ -156,9 +154,8 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			if (area_sq && !/^\d+(\.\d+)?$/.test(area_sq)) {
 				errors.area_sq = "Must be a number";
 			}
-			if (number_of_levels && !/^\d+$/.test(number_of_levels)) {
-				errors.number_of_levels = "Must be a number";
-			}
+			// Note: number_of_levels validation for dropdown values is handled by the dropdown options
+			// Numeric validation is only needed if direct numeric input is used
 		}
 	}
 
@@ -175,6 +172,23 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			showPropertyCategoryType
 		});
 		
+		// Helper function to map levels text to numbers
+		const mapLevelsToNumber = (levels: string): number | null => {
+			if (!levels || levels === "N/A") return null;
+			switch (levels) {
+				case "Single Storey":
+					return 1;
+				case "Double Storey":
+					return 2;
+				case "Triple Storey":
+					return 3;
+				default:
+					// If it's already a number, parse it
+					const numLevels = Number(levels);
+					return isNaN(numLevels) ? null : numLevels;
+			}
+		};
+
 		// Build payload with available keys
 		const payload: Record<string, unknown> = {
 			// Address
@@ -187,7 +201,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			// Quoting-derived fields mapped to backend keys
 			number_of_bedrooms: quoting_bedrooms_including_study ? Number(quoting_bedrooms_including_study) : null,
 			number_of_bathrooms: quoting_bathrooms_rounded ? Number(quoting_bathrooms_rounded) : null,
-			number_of_levels: quoting_levels ? Number(quoting_levels) : (number_of_levels ? Number(number_of_levels) : null),
+			number_of_levels: quoting_levels ? mapLevelsToNumber(quoting_levels) : (number_of_levels ? mapLevelsToNumber(number_of_levels) : null),
 			property_category: quoting_property_classification ? quoting_property_classification.toLowerCase() : null,
 			property_type: quoting_property_type || null,
 			// Construction stages specific fields
@@ -226,16 +240,20 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 		if (property_id) {
 			const updated = await updateProperty(property_id, payload as any);
 			resultingPropertyId = updated?.id ? String(updated.id) : property_id;
-			// For existing property, optionally create agents if provided
-			if (resultingPropertyId && extractedAgents.length > 0) {
-				await createAgentsForProperty(resultingPropertyId, extractedAgents);
-			}
 		} else {
 			const created = await createProperty(payload as any);
 			resultingPropertyId = created?.id ? String(created.id) : undefined;
-			// Create listing agents for the newly created property if any
-			if (resultingPropertyId && extractedAgents.length > 0) {
-				await createAgentsForProperty(resultingPropertyId, extractedAgents);
+		}
+
+		// Create agent contacts linked to deal and user (instead of linking to property)
+		if (extractedAgents.length > 0 && deal_id && user_id) {
+			try {
+				console.log("[submitProperty] Creating agent contacts for deal:", deal_id, "user:", user_id);
+				await createAgentContactsForDeal(deal_id, user_id, extractedAgents);
+				console.log("[submitProperty] Successfully created agent contacts");
+			} catch (e) {
+				console.error("[submitProperty] Failed to create agent contacts:", e);
+				// Don't fail the entire submission if agent creation fails
 			}
 		}
 

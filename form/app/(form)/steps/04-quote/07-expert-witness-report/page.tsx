@@ -88,14 +88,34 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			const propId = propertyId || (deal?.property ? String(deal.property) : undefined);
 			const property = propId ? await getProperty(propId) : null;
 			
+			// Get inspection stages from deal first, fallback to property or default
+			const dealInspectionStages: any[] = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+			console.log("[StepQuote][ExpertWitness] Deal inspection stages:", { dealId, dealInspectionStages, dealObject: deal });
+			const selectedStageNumbers = dealInspectionStages.length > 0 
+				? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: ((property as any)?.stages || [1, 2, 3]); // Default 3 stages for expert witness report
+			console.log("[StepQuote][ExpertWitness] Selected stage numbers:", selectedStageNumbers);
+			
 			if (service?.service_type && property) {
+				// Get all available stages from service configuration first
+				let allServiceStages: any[] = [];
+				try {
+					const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+					allServiceStages = (serviceRes as any)?.data?.stages || [];
+					console.log("[StepQuote][ExpertWitness] All service stages:", allServiceStages);
+				} catch (error) {
+					console.warn("Failed to fetch service stages:", error);
+				}
+				
 				const propertyDetails: PropertyDetails = {
 					property_category: (property?.property_category as any) || "residential",
 					bedrooms: (property as any)?.number_of_bedrooms || 0,
 					bathrooms: (property as any)?.number_of_bathrooms || 0,
 					levels: (property as any)?.number_of_levels || 0,
 					basement: Boolean((property as any)?.basement),
-					stages: (property as any)?.stages || [],
+					stages: allServiceStages.length > 0 
+						? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+						: [1, 2, 3], // Fallback to default stages
 					area_sq: (property as any)?.area_sq || 0,
 					estimated_damage_loss: (property as any)?.estimated_damage_loss || 0,
 				};
@@ -117,10 +137,14 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						}
 					}
 					
-					// Store stage prices for expert witness report
+					// Store stage prices for expert witness report - always show all available stages
 					if (service.service_type === "expert_witness_report" && estimate.stage_prices) {
 						stagePrices = Array.isArray(estimate.stage_prices) ? estimate.stage_prices : [];
-						preselectedStages = stagePrices.map(s => s.stage); // Default to all stages selected
+						// Only preselect stages that are in the deal
+						preselectedStages = dealInspectionStages.length > 0 
+							? selectedStageNumbers 
+							: [];
+						console.log("[StepQuote][ExpertWitness] Stage setup:", { stagePrices, preselectedStages, dealInspectionStages });
 					}
 					
 					// Store the base estimate for QuotesForm to use in calculations
@@ -144,10 +168,30 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 		let amount = 0;
 		let note: string | undefined = undefined;
 		
+		// Get inspection stages from deal first, fallback to property or default
+		const dealInspectionStages: any[] = Array.isArray((deal as any)?.inspection_stages) ? (deal as any).inspection_stages : [];
+		console.log("[StepQuote][ExpertWitness][NewProposal] Deal inspection stages:", { dealId, dealInspectionStages });
+		const selectedStageNumbers = dealInspectionStages.length > 0 
+			? dealInspectionStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+			: ((property as any)?.stages || [1, 2, 3]); // Default stages if not specified
+		console.log("[StepQuote][ExpertWitness][NewProposal] Selected stage numbers:", selectedStageNumbers);
+		
+		// Get all available stages from service configuration first
+		let allServiceStages: any[] = [];
+		try {
+			const serviceRes = await getRequest<{ data: { stages?: any[] } }>(`/items/services/${encodeURIComponent(String(svcId))}?fields=stages`);
+			allServiceStages = (serviceRes as any)?.data?.stages || [];
+			console.log("[StepQuote][ExpertWitness][NewProposal] All service stages:", allServiceStages);
+		} catch (error) {
+			console.warn("Failed to fetch service stages:", error);
+		}
+		
 		// Use service-specific quote estimation for expert witness report
 		const propertyDetails: PropertyDetails = {
 			property_category,
-			stages: (property as any)?.stages || [1, 2, 3], // Default stages if not specified
+			stages: allServiceStages.length > 0 
+				? allServiceStages.map(s => Number(s.stage_number)).filter(n => Number.isFinite(n))
+				: [1, 2, 3], // Fallback to default stages
 		};
 		
 		try {
@@ -158,7 +202,10 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			// Store stage prices for expert witness report
 			if (estimate?.stage_prices) {
 				stagePrices = Array.isArray(estimate.stage_prices) ? estimate.stage_prices : [];
-				preselectedStages = stagePrices.map(s => s.stage); // Default to all stages selected
+				// Use stages from deal if available, otherwise empty (toggles OFF)
+				preselectedStages = dealInspectionStages.length > 0 
+					? selectedStageNumbers 
+					: [];
 			}
 		} catch (error) {
 			console.warn("[StepQuote] Expert witness report quote estimation failed:", error);
@@ -371,7 +418,30 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 						{ label: "Expiry Date", value: expiryDateFmt },
 					]}
 				/>
-				<QuotesForm quote={viewModel as any} dealId={dealId} contactId={contactId} propertyId={propertyId} invoiceId={invoiceId} paymentId={paymentId} quoteNote={quoteNote} addons={addons} termiteRisk={termiteRisk} termiteRiskReason={termiteRiskReason} preselectedAddonIds={preselectedAddonIds} userId={userId} gstRate={gstRate} proposalStatus={statusRaw} stagePrices={stagePrices} preselectedStages={preselectedStages} serviceId={7} />
+				<QuotesForm 
+					quote={viewModel as any} 
+					dealId={dealId} 
+					contactId={contactId} 
+					propertyId={propertyId} 
+					invoiceId={invoiceId} 
+					paymentId={paymentId} 
+					quoteNote={quoteNote} 
+					addons={addons} 
+					termiteRisk={termiteRisk} 
+					termiteRiskReason={termiteRiskReason} 
+					preselectedAddonIds={preselectedAddonIds} 
+					userId={userId} 
+					gstRate={gstRate} 
+					proposalStatus={statusRaw}
+					stagePrices={stagePrices}
+					preselectedStages={(() => {
+						// Only use preselected stages if they exist in the deal, otherwise empty array (all toggles OFF)
+						const finalStages = preselectedStages.length > 0 ? preselectedStages : [];
+						console.log("[StepQuote][ExpertWitness] Final preselected stages for QuotesForm:", { preselectedStages, finalStages });
+						return finalStages;
+					})()}
+					serviceId={7}
+				/>
 			</div>
 		</div>
 	);

@@ -208,16 +208,20 @@ export default function AutoFillField({
 		borderRadius: 6,
 		background: "var(--color-white)",
 		boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-		overflowY: "visible",
-		zIndex: 10,
+		zIndex: 1000,
+		maxHeight: "200px",
+		overflowY: "auto",
 	};
 
 	const optionStyleBase: React.CSSProperties = {
-		padding: "8px 12px",
+		padding: "12px 16px",
 		cursor: "pointer",
 		fontSize: 14,
 		color: "var(--color-text-primary)",
 		background: "var(--color-white)",
+		minHeight: "44px",
+		display: "flex",
+		alignItems: "center",
 	};
 
 	const hintStyle: React.CSSProperties = {

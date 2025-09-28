@@ -26,7 +26,7 @@ type SelectFieldProps = {
 
 function validateSelectField(value: string, required?: boolean): string | undefined {
   if (required && !value?.trim()) {
-    return VALIDATION_MESSAGES.SELECT_OPTION;
+    return VALIDATION_MESSAGES.REQUIRED;
   }
   return undefined;
 }
@@ -58,8 +58,14 @@ const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function Sel
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const fieldValue = e.target.value;
-    const validationError = validateSelectField(fieldValue, required);
-    setClientError(validationError);
+    // Only show client validation if there's no server error
+    if (!error) {
+      const validationError = validateSelectField(fieldValue, required);
+      setClientError(validationError);
+    } else {
+      // Clear client error when there's a server error
+      setClientError(undefined);
+    }
     onChange?.(e);
   };
 

@@ -11,6 +11,7 @@ import SelectField from "@/components/ui/fields/SelectField";
 import AddContactButton from "@/components/contacts/AddContactButton";
 import { submitBooking } from "@/lib/actions/bookings/submitBooking";
 import type { BookingActionResult } from "@/lib/actions/bookings/submitBooking";
+import { ThankYouSkeleton } from "@/components/ui/SkeletonLoader";
 
 type ContactRecord = { id: string | number; first_name?: string | null; last_name?: string | null; phone?: string | null; email?: string | null; contact_type?: string | null };
 
@@ -213,6 +214,28 @@ export default function BookingForm({
 		gap: 24,
 	};
 
+	// Show skeleton loading while booking is being submitted (until redirect to step 9)
+	if (state?.success) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<ThankYouSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<form action={formAction} style={{ display: "grid", gap: 24 }} noValidate>
 			<input type="hidden" name="booking_id" value={bookingId} />
@@ -261,32 +284,37 @@ export default function BookingForm({
 										<SelectField 
 											name={`property_${property?.id}_contact_person_contact_type`} 
 											label="Contact type" 
-											options={CONTACT_TYPE_OPTIONS_NO_REAL_ESTATE}
+											options={contactTypeOptions}
 											placeholder="Select contact type"
 											required 
+											error={state?.errors?.[`property_${property?.id}_contact_person_contact_type`]}
 										/>
 										<div className="contact-form-grid">
 											<TextField 
 												name={`property_${property?.id}_contact_person_first_name`} 
 												label="First name" 
 												required 
+												error={state?.errors?.[`property_${property?.id}_contact_person_first_name`]}
 											/>
 											<TextField 
 												name={`property_${property?.id}_contact_person_last_name`} 
 												label="Last name" 
 												required 
+												error={state?.errors?.[`property_${property?.id}_contact_person_last_name`]}
 											/>
 										</div>
 										<div className="contact-form-grid">
 											<EmailField 
 												name={`property_${property?.id}_contact_person_email`} 
 												label="Email" 
-												required 
+												required
+												error={state?.errors?.[`property_${property?.id}_contact_person_email`]}
 											/>
 											<AuPhoneField 
 												name={`property_${property?.id}_contact_person_phone`} 
 												label="Mobile" 
 												required 
+												error={state?.errors?.[`property_${property?.id}_contact_person_phone`]}
 											/>
 										</div>
 									</div>
@@ -309,22 +337,23 @@ export default function BookingForm({
 								options={contactTypeOptions}
 								placeholder="Select contact type"
 								required 
+								error={state?.errors?.["contact_new_1_contact_type"]}
 							/>
 						</div>
 						<div className="contact-form-grid">
-							<TextField name="new_contact_1_first_name" label="First name" required />
-							<TextField name="new_contact_1_last_name" label="Last name" required />
+							<TextField name="new_contact_1_first_name" label="First name" required error={state?.errors?.["contact_new_1_first_name"]} />
+							<TextField name="new_contact_1_last_name" label="Last name" required error={state?.errors?.["contact_new_1_last_name"]} />
 						</div>
 						<div className="contact-form-grid">
-							<EmailField name="new_contact_1_email" label="Email" required />
+							<EmailField name="new_contact_1_email" label="Email" required error={state?.errors?.["contact_new_1_email"]} />
 							<AuPhoneField name="new_contact_1_phone" label="Mobile" required error={state?.errors?.["contact_new_1_phone"]} />
 						</div>
 					</div>
 				</div>
 			) : (
 				<div style={{ display: "grid", gap: 16 }}>
-					{contactsList.map((ct) => (
-						<div key={String(ct.id)} style={{ 
+					{contactsList.map((ct, index) => (
+						<div key={`${String(ct.id)}-${index}`} style={{ 
 							border: "1px solid var(--color-light-gray)", 
 							borderRadius: 8, 
 							padding: 16, 
@@ -339,11 +368,12 @@ export default function BookingForm({
 										defaultValue={ct.contact_type || ""}
 										placeholder="Select contact type"
 										required 
+										error={state?.errors?.[`contact_${ct.id}_contact_type`]}
 									/>
 								</div>
 								<div className="contact-form-grid">
-									<TextField name={`contact_${ct.id}_first_name`} label="First name" defaultValue={ct.first_name || ""} required />
-									<TextField name={`contact_${ct.id}_last_name`} label="Last name" defaultValue={ct.last_name || ""} required />
+									<TextField name={`contact_${ct.id}_first_name`} label="First name" defaultValue={ct.first_name || ""} required error={state?.errors?.[`contact_${ct.id}_first_name`]} />
+									<TextField name={`contact_${ct.id}_last_name`} label="Last name" defaultValue={ct.last_name || ""} required error={state?.errors?.[`contact_${ct.id}_last_name`]} />
 								</div>
 								<div className="contact-form-grid">
 									<EmailField 
@@ -351,6 +381,7 @@ export default function BookingForm({
 										label="Email" 
 										defaultValue={ct.email || ""} 
 										required={ct.contact_type !== "real_estate_agent"} 
+										error={state?.errors?.[`contact_${ct.id}_email`]}
 									/>
 									<AuPhoneField 
 										name={`contact_${ct.id}_phone`} 

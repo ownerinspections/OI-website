@@ -56,9 +56,14 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 		let next = digitsOnly;
 		if (next.length === 0) {
 			setLocalNumber("");
-			// Validate empty value only after user interaction
-			const validationError = validatePhoneField("", required);
-			setClientError(validationError);
+			// Only show client validation if there's no server error
+			if (!error) {
+				const validationError = validatePhoneField("", required);
+				setClientError(validationError);
+			} else {
+				// Clear client error when there's a server error
+				setClientError(undefined);
+			}
 			return;
 		}
 		if (next[0] !== "4") {

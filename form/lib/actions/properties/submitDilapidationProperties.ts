@@ -3,6 +3,7 @@
 import { createProperty } from "@/lib/actions/properties/createProperty";
 import { updateProperty } from "@/lib/actions/properties/updateProperty";
 import { createAgentContactsForDeal } from "@/lib/actions/contacts/createAgentContacts";
+import { APP_BASE_URL } from "@/lib/env";
 
 export type SubmitResult = {
 	success?: boolean;
@@ -274,7 +275,9 @@ export async function submitDilapidationProperties(_prev: SubmitResult, formData
 			}
 		}
 
-		const next = new URL("/steps/03-phone-verification", "http://localhost");
+		// Generate proper SSR-compliant URL using APP_BASE_URL
+		const baseUrl = APP_BASE_URL || (process?.env?.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+		const next = new URL("/steps/03-phone-verification", baseUrl);
 		if (user_id) next.searchParams.set("userId", user_id);
 		if (contact_id) next.searchParams.set("contactId", contact_id);
 		if (deal_id) next.searchParams.set("dealId", deal_id);

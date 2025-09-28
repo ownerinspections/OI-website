@@ -23,14 +23,45 @@ type ContactData = {
 function validateContact(contact: ContactData, index: string | number, isNew: boolean = false): Record<string, string> {
 	const errors: Record<string, string> = {};
 	
-	// Validate phone - always required for real estate agents
-	if (contact.contact_type === "real_estate_agent") {
-		if (!contact.phone?.trim()) {
-			errors[`contact_${index}_phone`] = "Phone is required for real estate agents";
+	// Validate required fields
+	if (!contact.first_name?.trim()) {
+		errors[`contact_${index}_first_name`] = "First name is required";
+	}
+	
+	if (!contact.last_name?.trim()) {
+		errors[`contact_${index}_last_name`] = "Last name is required";
+	}
+	
+	if (!contact.contact_type?.trim()) {
+		errors[`contact_${index}_contact_type`] = "Contact type is required";
+	}
+	
+	// Validate email - required for all except real estate agents
+	if (contact.contact_type !== "real_estate_agent") {
+		if (!contact.email?.trim()) {
+			errors[`contact_${index}_email`] = "Email is required";
+		} else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(contact.email.trim())) {
+			errors[`contact_${index}_email`] = "Enter a valid email address";
 		}
-	} else if (isNew && contact.first_name && contact.last_name && !contact.phone?.trim()) {
-		// For non-real estate agents, only validate phone if it's a new contact with name data
+	}
+	
+	// Validate phone - always required
+	if (!contact.phone?.trim()) {
 		errors[`contact_${index}_phone`] = "Phone is required";
+	} else {
+		// Validate Australian phone format
+		const phoneDigits = contact.phone.replace(/\D+/g, "");
+		if (contact.phone.startsWith("+61")) {
+			// E.164 format (+61...)
+			if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) {
+				errors[`contact_${index}_phone`] = "Enter a valid Australian mobile number";
+			}
+		} else {
+			// Local format (4xx xxx xxx or partial)
+			if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) {
+				errors[`contact_${index}_phone`] = "Enter a valid Australian mobile number";
+			}
+		}
 	}
 	
 	return errors;
@@ -172,23 +203,35 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 						};
 						
 						if (!contactPersonData.first_name) {
-							allErrors[`property_${propertyId}_contact_person_first_name`] = "First name is required for contact person";
+							allErrors[`property_${propertyId}_contact_person_first_name`] = "First name is required";
 						}
 						if (!contactPersonData.last_name) {
-							allErrors[`property_${propertyId}_contact_person_last_name`] = "Last name is required for contact person";
-						}
-						if (!contactPersonData.email && contactPersonData.contact_type !== "real_estate_agent") {
-							allErrors[`property_${propertyId}_contact_person_email`] = "Email is required for contact person";
-						}
-						if (!contactPersonData.phone) {
-							if (contactPersonData.contact_type === "real_estate_agent") {
-								allErrors[`property_${propertyId}_contact_person_phone`] = "Phone is required for real estate agents";
-							} else {
-								allErrors[`property_${propertyId}_contact_person_phone`] = "Phone is required for contact person";
-							}
+							allErrors[`property_${propertyId}_contact_person_last_name`] = "Last name is required";
 						}
 						if (!contactPersonData.contact_type) {
-							allErrors[`property_${propertyId}_contact_person_contact_type`] = "Contact type is required for contact person";
+							allErrors[`property_${propertyId}_contact_person_contact_type`] = "Contact type is required";
+						}
+						if (!contactPersonData.email && contactPersonData.contact_type !== "real_estate_agent") {
+							allErrors[`property_${propertyId}_contact_person_email`] = "Email is required";
+						} else if (contactPersonData.email && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(contactPersonData.email)) {
+							allErrors[`property_${propertyId}_contact_person_email`] = "Enter a valid email address";
+						}
+						if (!contactPersonData.phone) {
+							allErrors[`property_${propertyId}_contact_person_phone`] = "Phone is required";
+						} else {
+							// Validate Australian phone format
+							const phoneDigits = contactPersonData.phone.replace(/\D+/g, "");
+							if (contactPersonData.phone.startsWith("+61")) {
+								// E.164 format (+61...)
+								if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) {
+									allErrors[`property_${propertyId}_contact_person_phone`] = "Enter a valid Australian mobile number";
+								}
+							} else {
+								// Local format (4xx xxx xxx or partial)
+								if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) {
+									allErrors[`property_${propertyId}_contact_person_phone`] = "Enter a valid Australian mobile number";
+								}
+							}
 						}
 					}
 				}

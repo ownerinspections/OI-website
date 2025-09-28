@@ -7,6 +7,7 @@ import EmailField from "@/components/ui/fields/EmailField";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
 import AutoFillField from "@/components/ui/fields/AutoFillField";
 import NextButton from "@/components/ui/controls/NextButton";
+import { ContactFormSkeleton } from "@/components/ui/SkeletonLoader";
 import type { ActionResult } from "@/lib/actions/contacts/createContact";
 import { submitContact } from "@/lib/actions/contacts/createContact";
 import type { ServiceRecord } from "@/lib/actions/services/getService";
@@ -35,6 +36,7 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 	const [email, setEmail] = useState<string>(initialValues?.email ?? "");
 	const [serviceId, setServiceId] = useState<string>(initialValues?.service_id ?? "");
 	const [submitted, setSubmitted] = useState<boolean>(false);
+	const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
 	const filteredServices = useMemo(() => services, [services]);
 
@@ -60,6 +62,7 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 
 	useEffect(() => {
 		if (state?.success && state?.contactId && state?.dealId) {
+			// Use window.location for immediate navigation to avoid SSR issues
 			const url = new URL(`/steps/02-property`, window.location.origin);
 			// Required order: userId, contactId, dealId, propertyId, quoteId
 			const currentUrl = new URL(window.location.href);
@@ -72,9 +75,12 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 			if (propertyId) url.searchParams.set("propertyId", propertyId);
 			const quoteId = currentUrl.searchParams.get("quoteId");
 			if (quoteId) url.searchParams.set("quoteId", quoteId);
-			router.replace(url.toString());
+			
+			// Use window.location.assign for immediate navigation instead of router.replace
+			// This ensures the navigation happens immediately and avoids SSR hydration issues
+			window.location.assign(url.toString());
 		}
-	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId, router]);
+	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId]);
 
 	const formStyle: React.CSSProperties = {
 		display: "grid",
@@ -92,18 +98,44 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 		justifyContent: "flex-end",
 	};
 
-	// During redirect after success, render nothing
-	if (state?.success) {
-		return null;
-	}
 
 	const serviceIdError = state?.errors?.service_id ?? (submitted && !serviceId ? "Service is required" : undefined);
 
+	// Show full page skeleton loading while form is being submitted or after success (until redirect)
+	if (isSubmitting || state?.success) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<ContactFormSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<>
 			{/* Removed duplicate local subtitle to rely on standardized step header */}
-			<form action={formAction} className="form-grid" style={formStyle} noValidate onSubmit={() => setSubmitted(true)}>
+			<form 
+				action={formAction} 
+				className="form-grid" 
+				style={formStyle} 
+				noValidate 
+				onSubmit={() => {
+					setSubmitted(true);
+					setIsSubmitting(true);
+				}}
+			>
 					<input type="hidden" name="deal_id" value={dealId ?? ""} />
 					<input type="hidden" name="contact_id" value={contactId ?? ""} />
 					<input type="hidden" name="property_id" value={propertyId ?? ""} />
@@ -136,7 +168,7 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 					</div>
 					{/* Address fields removed on step 1 */}
 				<div style={actionsStyle}>
-					<NextButton label="Next" />
+					<NextButton label={isSubmitting ? "Processing..." : "Next"} disabled={isSubmitting} />
 				</div>
 			</form>
 		</>

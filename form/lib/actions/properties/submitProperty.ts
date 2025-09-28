@@ -3,6 +3,8 @@
 import { createProperty } from "@/lib/actions/properties/createProperty";
 import { updateProperty } from "@/lib/actions/properties/updateProperty";
 import { createAgentContactsForDeal } from "@/lib/actions/contacts/createAgentContacts";
+import { VALIDATION_MESSAGES, VALIDATION_PATTERNS, VALIDATION_LIMITS } from "@/lib/validation/constants";
+import { APP_BASE_URL } from "@/lib/env";
 
 export type SubmitResult = {
 	success?: boolean;
@@ -105,36 +107,40 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 	// Address must be selected (only for services that require it)
 	if (isAddressRequired) {
 		if (!full_address) {
-			errors.full_address = "Please select a valid address";
+			errors.full_address = VALIDATION_MESSAGES.ADDRESS_REQUIRED;
 		}
 		if (full_address && (!suburb || !state || !post_code)) {
-			errors.full_address = "Please select a valid address suggestion";
+			errors.full_address = VALIDATION_MESSAGES.INVALID_ADDRESS;
 		}
 	}
 
 	// Required quoting fields (only for services that need property details)
 	if (showPropertyDetails) {
-		if (!quoting_property_classification) errors.quoting_property_classification = "Required";
-		if (!quoting_property_type) errors.quoting_property_type = "Required";
-		if (!quoting_bedrooms_including_study) errors.quoting_bedrooms_including_study = "Required";
-		if (!quoting_bathrooms_rounded) errors.quoting_bathrooms_rounded = "Required";
+		if (!quoting_property_classification) errors.quoting_property_classification = VALIDATION_MESSAGES.PROPERTY_CLASSIFICATION_REQUIRED;
+		if (!quoting_property_type) errors.quoting_property_type = VALIDATION_MESSAGES.PROPERTY_TYPE_REQUIRED;
+		if (!quoting_bedrooms_including_study) errors.quoting_bedrooms_including_study = VALIDATION_MESSAGES.REQUIRED;
+		if (!quoting_bathrooms_rounded) errors.quoting_bathrooms_rounded = VALIDATION_MESSAGES.REQUIRED;
 
 		// Property-type specific required fields
 		const isApartmentUnit = quoting_property_type.toLowerCase() === "apartment/unit";
 		if (!isApartmentUnit) {
-			if (!quoting_levels) errors.quoting_levels = "Required";
-			if (!quoting_has_basement_or_subfloor) errors.quoting_has_basement_or_subfloor = "Required";
+			if (!quoting_levels) errors.quoting_levels = VALIDATION_MESSAGES.LEVELS_REQUIRED;
+			if (!quoting_has_basement_or_subfloor) errors.quoting_has_basement_or_subfloor = VALIDATION_MESSAGES.BASEMENT_REQUIRED;
 			// additional_structures is optional
 		}
 
-		// Numeric checks
-		if (quoting_bedrooms_including_study && !/^\d+$/.test(quoting_bedrooms_including_study)) {
-			errors.quoting_bedrooms_including_study = "Must be a number";
+		// Enhanced numeric validation with proper error messages
+		if (quoting_bedrooms_including_study) {
+			if (!VALIDATION_PATTERNS.BEDROOMS.test(quoting_bedrooms_including_study)) {
+				errors.quoting_bedrooms_including_study = VALIDATION_MESSAGES.INVALID_BEDROOMS;
+			}
 		}
-		if (quoting_bathrooms_rounded && !/^\d+$/.test(quoting_bathrooms_rounded)) {
-			errors.quoting_bathrooms_rounded = "Must be a number";
+		if (quoting_bathrooms_rounded) {
+			if (!VALIDATION_PATTERNS.BATHROOMS.test(quoting_bathrooms_rounded)) {
+				errors.quoting_bathrooms_rounded = VALIDATION_MESSAGES.INVALID_BATHROOMS;
+			}
 		}
-	// No longer validate quoting_levels as numeric since it's now a dropdown with text values
+		// No longer validate quoting_levels as numeric since it's now a dropdown with text values
 	}
 
 	// Services that need basic property category/type fields (5, 6, 7, 8)
@@ -142,20 +148,26 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 	const showPropertyCategoryType = serviceIdNumber && servicesWithPropertyCategoryType.includes(serviceIdNumber);
 	
 	if (showPropertyCategoryType) {
-		if (!quoting_property_classification) errors.quoting_property_classification = "Required";
-		if (!quoting_property_type) errors.quoting_property_type = "Required";
+		if (!quoting_property_classification) errors.quoting_property_classification = VALIDATION_MESSAGES.PROPERTY_CLASSIFICATION_REQUIRED;
+		if (!quoting_property_type) errors.quoting_property_type = VALIDATION_MESSAGES.PROPERTY_TYPE_REQUIRED;
 		
 		// Construction stages specific fields (service 5)
 		if (serviceIdNumber === 5) {
-			if (!area_sq) errors.area_sq = "Required";
-			if (!number_of_levels) errors.number_of_levels = "Required";
+			if (!area_sq) errors.area_sq = VALIDATION_MESSAGES.REQUIRED;
+			if (!number_of_levels) errors.number_of_levels = VALIDATION_MESSAGES.LEVELS_REQUIRED;
 			
-			// Numeric checks for construction stages
-			if (area_sq && !/^\d+(\.\d+)?$/.test(area_sq)) {
-				errors.area_sq = "Must be a number";
+			// Enhanced numeric validation for area
+			if (area_sq) {
+				if (!VALIDATION_PATTERNS.AREA_SIZE.test(area_sq)) {
+					errors.area_sq = VALIDATION_MESSAGES.INVALID_AREA;
+				} else {
+					const area = parseFloat(area_sq);
+					if (area < VALIDATION_LIMITS.MIN_AREA || area > VALIDATION_LIMITS.MAX_AREA) {
+						errors.area_sq = `Area must be between ${VALIDATION_LIMITS.MIN_AREA} and ${VALIDATION_LIMITS.MAX_AREA} sq m`;
+					}
+				}
 			}
 			// Note: number_of_levels validation for dropdown values is handled by the dropdown options
-			// Numeric validation is only needed if direct numeric input is used
 		}
 	}
 
@@ -238,11 +250,15 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 
 		let resultingPropertyId: string | undefined = undefined;
 		if (property_id) {
+			console.log("[submitProperty] Updating existing property with new extraction data:", property_id);
 			const updated = await updateProperty(property_id, payload as any);
 			resultingPropertyId = updated?.id ? String(updated.id) : property_id;
+			console.log("[submitProperty] Property updated successfully with new address and extracted details");
 		} else {
+			console.log("[submitProperty] Creating new property with extraction data");
 			const created = await createProperty(payload as any);
 			resultingPropertyId = created?.id ? String(created.id) : undefined;
+			console.log("[submitProperty] New property created successfully");
 		}
 
 		// Create agent contacts linked to deal and user (instead of linking to property)
@@ -257,7 +273,9 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			}
 		}
 
-		const next = new URL("/steps/03-phone-verification", "http://localhost");
+		// Generate proper SSR-compliant URL using APP_BASE_URL
+		const baseUrl = APP_BASE_URL || (process?.env?.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+		const next = new URL("/steps/03-phone-verification", baseUrl);
 		if (user_id) next.searchParams.set("userId", user_id);
 		if (contact_id) next.searchParams.set("contactId", contact_id);
 		if (deal_id) next.searchParams.set("dealId", deal_id);

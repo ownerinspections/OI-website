@@ -10,6 +10,7 @@ import WarningBox from "@/components/ui/messages/WarningBox";
 import NoteBox from "@/components/ui/messages/NoteBox";
 import { fetchGstRate } from "@/lib/actions/invoices/createInvoice";
 import { estimateInsuranceReportQuote, type PropertyDetails } from "@/lib/actions/quotes/estimateQuote";
+import { InvoiceFormSkeleton } from "@/components/ui/SkeletonLoader";
 
 // Server action to create invoice and approve proposal
 async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string, paymentId?: string) {
@@ -179,6 +180,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	const [currentEstimatedDamageLoss, setCurrentEstimatedDamageLoss] = React.useState(estimatedDamageLoss || 100000);
 	const [currentStagePrices, setCurrentStagePrices] = React.useState(stagePrices || []);
 	const [isUpdatingQuote, setIsUpdatingQuote] = React.useState(false);
+	const [isNavigating, setIsNavigating] = React.useState(false);
 
 	// Debounced function to update quote when estimated damage loss changes
 	const updateQuoteFromDamageLoss = React.useCallback(
@@ -251,6 +253,7 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	const totalAmountIncludingGst = +(subtotalExcludingGst + gstAmount).toFixed(2);
 
 	const handleAcceptQuoteClick = () => {
+		setIsNavigating(true);
 		createInvoiceAndNavigate(String(quote?.id), dealId || "", contactId || "", propertyId || "", subtotalExcludingGst, invoiceId || undefined, userId || undefined, paymentId || undefined);
 	};
 
@@ -310,6 +313,28 @@ export default function QuotesForm({ quote, dealId, contactId, propertyId, invoi
 	})();
 
 	if (!quote) return <div style={cardStyle}>No quote found.</div>;
+
+	// Show full page skeleton loading while navigating to step 5
+	if (isNavigating) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<InvoiceFormSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div style={cardStyle}>

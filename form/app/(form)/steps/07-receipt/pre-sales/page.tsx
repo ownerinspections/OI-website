@@ -1,5 +1,5 @@
 import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
-import { ensureBooking } from "@/lib/actions/bookings/createBooking";
+import ReceiptPageClient from "@/components/receipts/ReceiptPageClient";
 import { closeDealFromInvoice } from "@/lib/actions/deals/closeDealFromInvoice";
 import { updateQuoteStatusToPaid } from "@/lib/actions/quotes/updateQuoteStatus";
 import Stripe from "stripe";
@@ -9,6 +9,7 @@ import FormHeader from "@/components/ui/FormHeader";
 import { getReceiptNote } from "@/lib/actions/globals/getGlobal";
 import NoteBox from "@/components/ui/messages/NoteBox";
 import { redirect } from "next/navigation";
+import ReceiptFormWrapper from "@/components/ui/ReceiptFormWrapper";
 
 // Utility function to format Australian phone numbers (same as step 5)
 function formatAustralianPhone(phone: string): string {
@@ -448,162 +449,113 @@ export default async function PreSalesReceiptStep({ searchParams }: { searchPara
     const receiptNote = await getReceiptNote();
 
     return (
-        <div className="container">
-            <div className="card">
-                <FormHeader
-                    rightTitle="Receipt"
-                    rightSubtitle="Pre-Sales Inspection"
-                    rightMeta={[
-                        { label: "Invoice #", value: (invoice as any)?.invoice_id },
-                        { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
-                    ]}
-                />
-                {receiptNote ? (
-                    <NoteBox style={{ marginBottom: 16 }}>
-                        {receiptNote}
-                    </NoteBox>
-                ) : null}
-                {/* Removed secondary details under the header per request */}
+        <ReceiptPageClient
+            invoiceId={String(invoice?.id)}
+            propertyId={propertyId}
+            userId={userId}
+            contactId={contactId}
+            dealId={dealId}
+            quoteId={quoteId}
+        >
+            <div className="container">
+                <div className="card">
+                    <FormHeader
+                        rightTitle="Receipt"
+                        rightSubtitle="Pre-Sales Inspection"
+                        rightMeta={[
+                            { label: "Invoice #", value: (invoice as any)?.invoice_id },
+                            { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
+                        ]}
+                    />
+                    {receiptNote ? (
+                        <NoteBox style={{ marginBottom: 16 }}>
+                            {receiptNote}
+                        </NoteBox>
+                    ) : null}
+                    {/* Removed secondary details under the header per request */}
 
-                {/* Customer and Property Details (same style as step 5) */}
-                <div className="receipt-details-section">
-                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
-                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Bill To:</h3>
-                        {customer ? (
-                            <div style={{ lineHeight: 1.5 }}>
-                                <div style={{ fontWeight: 600 }}>
-                                    {customer.company_name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer'}
+                    {/* Customer and Property Details (same style as step 5) */}
+                    <div className="receipt-details-section">
+                        <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                            <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Bill To:</h3>
+                            {customer ? (
+                                <div style={{ lineHeight: 1.5 }}>
+                                    <div style={{ fontWeight: 600 }}>
+                                        {customer.company_name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer'}
+                                    </div>
+                                    {customer.email && <div>{customer.email}</div>}
+                                    {customer.phone && <div>{formatAustralianPhone(customer.phone)}</div>}
+                                    {customer.address && <div>{customer.address}</div>}
                                 </div>
-                                {customer.email && <div>{customer.email}</div>}
-                                {customer.phone && <div>{formatAustralianPhone(customer.phone)}</div>}
-                                {customer.address && <div>{customer.address}</div>}
+                            ) : (
+                                <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Customer information not available</div>
+                            )}
+                        </div>
+                        <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
+                            <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
+                            <div style={{ lineHeight: 1.5 }}>
+                                <div style={{ fontWeight: 600, marginBottom: 4 }}>Transaction ID</div>
+                                <div style={{ color: "var(--color-text-secondary)" }}>
+                                    {paymentRecord?.transaction_id || paymentRecord?.stripe_payment_id || paymentIntentId || "-"}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Property Details - Full Width */}
+                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
+                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
+                        {property ? (
+                            <div style={{ lineHeight: 1.5 }}>
+                                {/* Full Address - Single Column */}
+                                <div style={{ marginBottom: 16 }}>
+                                    {(() => {
+                                        const addressParts = [];
+                                        if (property.street_address) addressParts.push(property.street_address);
+                                        if (property.suburb) addressParts.push(property.suburb);
+                                        if (property.state) addressParts.push(property.state);
+                                        if (property.post_code) addressParts.push(property.post_code);
+                                        return addressParts.join(', ');
+                                    })()}
+                                </div>
+                                {/* Property Details - Two Columns */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div>
+                                        {property.property_type && <div>Type: {property.property_type}</div>}
+                                        {property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
+                                        {property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
+                                    </div>
+                                    <div>
+                                        {property.property_category && <div>Category: {property.property_category}</div>}
+                                        {property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
+                                        {property.basement && <div>Basement: Yes</div>}
+                                    </div>
+                                </div>
                             </div>
                         ) : (
-                            <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Customer information not available</div>
+                            <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
                         )}
                     </div>
-                    <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8 }}>
-                        <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
-                        <div style={{ lineHeight: 1.5 }}>
-                            <div style={{ fontWeight: 600, marginBottom: 4 }}>Transaction ID</div>
-                            <div style={{ color: "var(--color-text-secondary)" }}>
-                                {paymentRecord?.transaction_id || paymentRecord?.stripe_payment_id || paymentIntentId || "-"}
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Property Details - Full Width */}
-                <div style={{ background: "var(--color-pale-gray)", padding: 16, borderRadius: 8, marginBottom: 16 }}>
-                    <h3 style={{ margin: "0 0 12px 0", color: "var(--color-primary)" }}>Property Details:</h3>
-                    {property ? (
-                        <div style={{ lineHeight: 1.5 }}>
-                            {/* Full Address - Single Column */}
-                            <div style={{ marginBottom: 16 }}>
-                                {(() => {
-                                    const addressParts = [];
-                                    if (property.street_address) addressParts.push(property.street_address);
-                                    if (property.suburb) addressParts.push(property.suburb);
-                                    if (property.state) addressParts.push(property.state);
-                                    if (property.post_code) addressParts.push(property.post_code);
-                                    return addressParts.join(', ');
-                                })()}
-                            </div>
-                            {/* Property Details - Two Columns */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div>
-                                    {property.property_type && <div>Type: {property.property_type}</div>}
-                                    {property.number_of_bedrooms && <div>Bedrooms: {property.number_of_bedrooms}</div>}
-                                    {property.number_of_levels && <div>Levels: {property.number_of_levels}</div>}
-                                </div>
-                                <div>
-                                    {property.property_category && <div>Category: {property.property_category}</div>}
-                                    {property.number_of_bathrooms && <div>Bathrooms: {property.number_of_bathrooms}</div>}
-                                    {property.basement && <div>Basement: Yes</div>}
-                                </div>
+                    {/* Receipt Section */}
+                    {paymentRecord?.receipt_url && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600 }}>Receipt</div>
+                            <div>
+                                <a href={String(paymentRecord.receipt_url)} target="_blank" rel="noreferrer" style={{ color: "var(--color-link)" }}>View Stripe Receipt</a>
                             </div>
                         </div>
-                    ) : (
-                        <div style={{ color: "var(--color-text-secondary)", fontStyle: "italic" }}>Property information not available</div>
                     )}
-                </div>
 
-                {/* Receipt Section */}
-                {paymentRecord?.receipt_url && (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <div style={{ fontWeight: 600 }}>Receipt</div>
-                        <div>
-                            <a href={String(paymentRecord.receipt_url)} target="_blank" rel="noreferrer" style={{ color: "var(--color-link)" }}>View Stripe Receipt</a>
+                    <div style={{ borderTop: "1px solid var(--color-light-gray)", paddingTop: 16 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                            <span style={{ color: "var(--color-text-secondary)" }}>Amount Paid</span>
+                            <span style={{ fontWeight: 600, color: "var(--color-success)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(amountPaid)}</span>
                         </div>
+                        {/* Status row removed from totals */}
                     </div>
-                )}
-
-                <div style={{ borderTop: "1px solid var(--color-light-gray)", paddingTop: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ color: "var(--color-text-secondary)" }}>Amount Paid</span>
-                        <span style={{ fontWeight: 600, color: "var(--color-success)" }}>{new Intl.NumberFormat("en-AU", { style: "currency", currency }).format(amountPaid)}</span>
-                    </div>
-                    {/* Status row removed from totals */}
-                </div>
-                <div className="button-container" style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-                    {/* Server Action button: create booking from invoice/property/contact/user and go to Step 08 */}
-                    <form action={async () => {
-                        "use server";
-                        if (!invoice?.id) return;
-                        // Resolve propertyId: prefer URL param; fallback via deal -> property
-                        let propertyIdEffective: string | undefined = propertyId ? String(propertyId) : undefined;
-                        if (!propertyIdEffective && dealId) {
-                            try {
-                                const dealRes = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=properties`);
-                                const propsArr = (dealRes as any)?.data?.properties;
-                                const p = Array.isArray(propsArr) && propsArr.length > 0 ? propsArr[0] : undefined;
-                                if (p !== undefined && p !== null) propertyIdEffective = String(p);
-                            } catch {}
-                        }
-                        if (!propertyIdEffective && invoice?.id) {
-                            try {
-                                // Try infer from invoice -> proposal -> deal -> property chain if available
-                                const invRes = await getRequest<{ data: { proposal?: (string | number)[] } }>(`/items/os_invoices/${encodeURIComponent(String(invoice.id))}?fields=proposal`);
-                                const propArr = (invRes as any)?.data?.proposal;
-                                const firstProposalId = Array.isArray(propArr) && propArr.length > 0 ? String(propArr[0]) : undefined;
-                                if (firstProposalId) {
-                                    const propRes = await getRequest<{ data: { deal?: string | number } }>(`/items/os_proposals/${encodeURIComponent(firstProposalId)}?fields=deal`);
-                                    const d = (propRes as any)?.data?.deal;
-                                    if (d) {
-                                        const dealRes2 = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(d))}?fields=properties`);
-                                        const propsArr2 = (dealRes2 as any)?.data?.properties;
-                                        const p2 = Array.isArray(propsArr2) && propsArr2.length > 0 ? propsArr2[0] : undefined;
-                                        if (p2 !== undefined && p2 !== null) propertyIdEffective = String(p2);
-                                    }
-                                }
-                            } catch {}
-                        }
-                        if (!propertyIdEffective) return;
-
-                        const booking = await ensureBooking({
-                            invoiceId: String(invoice.id),
-                            propertyId: propertyIdEffective,
-                            userId: userId ? String(userId) : undefined,
-                            contactId: (contactId || invoice?.contact) ? String(contactId || invoice?.contact) : undefined,
-                            dealId: dealId ? String(dealId) : undefined,
-                            quoteId: quoteId ? String(quoteId) : undefined,
-                        });
-
-                        const sp = new URLSearchParams();
-                        if (userId) sp.set("userId", String(userId));
-                        if (contactId) sp.set("contactId", String(contactId));
-                        if (dealId) sp.set("dealId", String(dealId));
-                        if (propertyIdEffective) sp.set("propertyId", String(propertyIdEffective));
-                        if (quoteId) sp.set("quoteId", String(quoteId));
-                        if (invoice?.id) sp.set("invoiceId", String(invoice.id));
-                        if (booking?.id) sp.set("bookingId", String(booking.id));
-
-                        redirect(`/steps/08-booking?${sp.toString()}`);
-                    }}>
-                        <button type="submit" className="button-primary">Book Now</button>
-                    </form>
                 </div>
             </div>
-        </div>
+        </ReceiptPageClient>
     );
 }

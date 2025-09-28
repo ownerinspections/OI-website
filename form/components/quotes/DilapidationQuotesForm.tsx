@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import AddonTooltip from "@/components/ui/AddonTooltip";
 import Toggle from "@/components/ui/Toggle";
 import InfoBox from "@/components/ui/messages/InfoBox";
 import WarningBox from "@/components/ui/messages/WarningBox";
 import NoteBox from "@/components/ui/messages/NoteBox";
+import { InvoiceFormSkeleton } from "@/components/ui/SkeletonLoader";
 
 // Server action to create invoice and navigate
 async function createInvoiceAndNavigate(quoteId: string, dealId: string, contactId: string, propertyId: string, totalAmount: number, invoiceIdParam?: string, userId?: string, paymentId?: string) {
@@ -122,6 +123,7 @@ export default function DilapidationQuotesForm({
 }: Props) {
 	// Check if quote is paid and should be read-only
 	const isReadOnly = proposalStatus === "paid";
+	const [isNavigating, setIsNavigating] = useState(false);
 	
 	// Use exact same styles as QuotesForm
 	const cardStyle: React.CSSProperties = { padding: 16 };
@@ -177,6 +179,7 @@ export default function DilapidationQuotesForm({
 	const totalAmountIncludingGst = +(subtotal + gstAmount).toFixed(2);
 
 	const handleAcceptQuoteClick = () => {
+		setIsNavigating(true);
 		createInvoiceAndNavigate(String(quote?.id ?? ""), dealId ?? "", contactId ?? "", propertyId ?? "", totalAmountIncludingGst, invoiceId, userId || undefined, paymentId || undefined);
 	};
 
@@ -240,6 +243,28 @@ export default function DilapidationQuotesForm({
 	})();
 
 	if (!quote) return <div style={cardStyle}>No quote found.</div>;
+
+	// Show full page skeleton loading while navigating to step 5
+	if (isNavigating) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<InvoiceFormSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div style={cardStyle}>

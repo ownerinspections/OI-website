@@ -5,6 +5,7 @@ import { CompanyInfo, CustomerInfo, PropertyInfo } from "@/lib/actions/invoices/
 import PreviousButton from "@/components/ui/controls/PreviousButton";
 import FormFooter from "@/components/ui/FormFooter";
 import ErrorBox from "@/components/ui/messages/ErrorBox";
+import { PaymentFormSkeleton } from "@/components/ui/SkeletonLoader";
 
 type Props = {
 	invoice: {
@@ -74,6 +75,7 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 	const isPaid = (invoice.status || "").toLowerCase() === "paid";
 	const [termsAgreed, setTermsAgreed] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [isNavigating, setIsNavigating] = useState(false);
 	
 	console.log("InvoicesForm rendered with termsLink:", termsLink, "privacyPolicyLink:", privacyPolicyLink, "termsAgreed:", termsAgreed);
 
@@ -93,6 +95,7 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 		console.log("Terms agreed, proceeding with payment");
 		// If terms are agreed, proceed with the payment action
 		if (payNowAction) {
+			setIsNavigating(true);
 			await payNowAction();
 		}
 	};
@@ -167,6 +170,28 @@ export default function InvoicesForm({ invoice, companyInfo, customerInfo, nextH
 		gap: 8
 	};
 
+
+	// Show full page skeleton loading while navigating to step 6
+	if (isNavigating) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<PaymentFormSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div>

@@ -14,6 +14,8 @@ import SuccessBox from "@/components/ui/messages/SuccessBox";
 import WarningBox from "@/components/ui/messages/WarningBox";
 import ErrorBox from "@/components/ui/messages/ErrorBox";
 import NoteBox from "@/components/ui/messages/NoteBox";
+import { validatePropertyField, validatePropertyForm, type PropertyValidationData } from "@/lib/validation/propertyValidation";
+import { PhoneVerificationSkeleton } from "@/components/ui/SkeletonLoader";
 
 type Props = {
 	property?: PropertyRecord;
@@ -41,7 +43,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	const servicesWithoutPropertyDetails = [5, 6, 7, 8, 9];
 	const showPropertyDetails = !serviceId || !servicesWithoutPropertyDetails.includes(serviceId);
 	
-	// Services that need property category and type fields (5, 6, 7, 8, 9)
+	// Services that need only property category and type fields (5, 6, 7, 8, 9)
 	const servicesWithPropertyCategoryType = [5, 6, 7, 8, 9];
 	const showPropertyCategoryType = serviceId && servicesWithPropertyCategoryType.includes(serviceId);
 
@@ -76,10 +78,11 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	const [numberOfLevelsValue, setNumberOfLevelsValue] = useState<string>(() => {
 		const levels = property?.number_of_levels;
 		if (!levels) return "";
-		// Map numeric levels back to text for dropdown
-		if (levels === 1) return "Single Storey";
-		if (levels === 2) return "Double Storey";
-		if (levels === 3) return "Triple Storey";
+		// Convert to number if it's a string, then map to text for dropdown
+		const numericLevels = typeof levels === 'string' ? parseInt(levels, 10) : levels;
+		if (numericLevels === 1) return "Single Storey";
+		if (numericLevels === 2) return "Double Storey";
+		if (numericLevels === 3) return "Triple Storey";
 		return "";
 	});
 
@@ -103,8 +106,10 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	// When editing an existing property (propertyId present), prefill quoting fields and show them
 	const [initializedFromProperty, setInitializedFromProperty] = useState<boolean>(false);
 	useEffect(() => {
+		console.log("[PropertiesForm] useEffect running - initializedFromProperty:", initializedFromProperty, "property?.id:", property?.id, "propertyId:", propertyId);
 		if (initializedFromProperty) return;
 		const hasExistingProperty = Boolean(property?.id || propertyId);
+		console.log("[PropertiesForm] hasExistingProperty:", hasExistingProperty);
 		if (!hasExistingProperty) return;
 		// Prefill quoting fields from existing property details
 		const classification = (() => {
@@ -134,23 +139,38 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 			}
 			return "";
 		}
-		setQuoteEditable({
+		// Map levels for both quoteEditable and numberOfLevelsValue
+		const levelsValue = (() => {
+			const levels = property?.number_of_levels;
+			console.log("[PropertiesForm] Mapping levels - raw value:", levels, "type:", typeof levels);
+			if (!levels) return "";
+			// Convert to number if it's a string, then map to text for dropdown
+			const numericLevels = typeof levels === 'string' ? parseInt(levels, 10) : levels;
+			if (numericLevels === 1) return "Single Storey";
+			if (numericLevels === 2) return "Double Storey";
+			if (numericLevels === 3) return "Triple Storey";
+			return "";
+		})();
+		console.log("[PropertiesForm] Mapped levelsValue:", levelsValue);
+
+		const newQuoteEditable = {
 			property_classification: classification,
 			property_type: property?.property_type ?? "",
 			bedrooms_including_study: toNumericString(property?.number_of_bedrooms as unknown),
 			bathrooms_rounded: toNumericString(property?.number_of_bathrooms as unknown),
-			levels: (() => {
-				const levels = property?.number_of_levels;
-				if (!levels) return "";
-				// Map numeric levels back to text for dropdown
-				if (levels === 1) return "Single Storey";
-				if (levels === 2) return "Double Storey";
-				if (levels === 3) return "Triple Storey";
-				return "";
-			})(),
+			levels: levelsValue,
 			has_basement_or_subfloor: basementValue,
 			additional_structures: typeof property?.additional_structures === "string" ? property!.additional_structures! : "",
-		});
+		};
+		console.log("[PropertiesForm] Setting quoteEditable:", newQuoteEditable);
+		setQuoteEditable(newQuoteEditable);
+
+		// Also update numberOfLevelsValue for service 5 (construction stages)
+		console.log("[PropertiesForm] Setting numberOfLevelsValue:", levelsValue);
+		setNumberOfLevelsValue(levelsValue);
+
+		// Also update areaSizeValue for service 5 (construction stages)
+		setAreaSizeValue(property?.area_sq ? String(property.area_sq) : "");
 
 		// Build client info preview from existing property record
 		try {
@@ -181,7 +201,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		}
 		setHasExtracted(true);
 		setInitializedFromProperty(true);
-	}, [property?.id, propertyId, property?.property_category, property?.property_type, property?.number_of_bedrooms, property?.number_of_bathrooms, property?.number_of_levels, property?.basement, propertyCategory, initializedFromProperty]);
+	}, [property?.id, propertyId, property?.property_category, property?.property_type, property?.number_of_bedrooms, property?.number_of_bathrooms, property?.number_of_levels, property?.basement, propertyCategory]);
 
 	// No conditional detail fields
 
@@ -202,52 +222,101 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	};
 
 
+	// Enhanced validation using the new validation utility
+	const serverErrors = state?.errors ?? {};
+	const [hasUserInteracted, setHasUserInteracted] = useState<boolean>(false);
+	const [showValidationAttempted, setShowValidationAttempted] = useState<boolean>(false);
+	
+	// Show validation errors if:
+	// 1. User has interacted with the form
+	// 2. Form has been submitted
+	// 3. There are server-side validation errors
+	// 4. There's existing property data but it's incomplete (for better UX when editing)
+	// 5. User attempted to submit but form was invalid
+	const hasExistingIncompleteData = Boolean(property?.id || propertyId) && !addressSelected;
+	const showValidationErrors = hasUserInteracted || submitted || Object.keys(serverErrors).length > 0 || hasExistingIncompleteData || showValidationAttempted;
+
+	// Real-time validation for address
 	const addressError = useMemo(() => {
-		const serverError = state?.errors?.full_address;
-		// Clear error as soon as user types or selects an address
-		if (addressSelected) return undefined;
-		if (addressQuery.trim().length > 0) return undefined;
-		// Address is always required (even for specialized services)
-		return serverError ?? (submitted ? "Full address is required" : undefined);
-	}, [state?.errors?.full_address, addressSelected, addressQuery, submitted]);
-
-	// Client-side validation helpers and per-field errors for quoting fields
-	const quotingErrors = state?.errors ?? {};
-
-	const showQuotingErrors = useMemo(() => {
-		return submitted && (hasExtracted || !!extractError);
-	}, [submitted, hasExtracted, extractError]);
-
-	// Validation for property category and type fields (services 5, 6, 7, 8, 9)
-	const propertyCategoryError = showPropertyCategoryType && !propertyCategoryValue
-		? (quotingErrors.quoting_property_classification ?? (submitted ? "Required" : undefined))
-		: undefined;
-	const propertyTypeErrorSpecialized = showPropertyCategoryType && !propertyTypeValue
-		? (quotingErrors.quoting_property_type ?? (submitted ? "Required" : undefined))
-		: undefined;
+		const serverError = serverErrors.full_address;
+		if (serverError) return serverError;
 		
-	// Validation for construction stages specific fields (service 5)
-	const areaSizeError = serviceId === 5 && !areaSizeValue
-		? (quotingErrors.area_sq ?? (submitted ? "Required" : undefined))
-		: undefined;
-	const numberOfLevelsError = serviceId === 5 && !numberOfLevelsValue
-		? (quotingErrors.number_of_levels ?? (submitted ? "Required" : undefined))
-		: undefined;
+		if (showValidationErrors) {
+			return validatePropertyField.address(addressSelected, addressLabel);
+		}
+		return undefined;
+	}, [serverErrors.full_address, addressSelected, addressLabel, showValidationErrors]);
 
-	function isNumericString(value?: string) {
-		return typeof value === "string" && /^\d+$/.test(value);
-	}
+	// Real-time validation for property category (services 5, 6, 7, 8, 9)
+	const propertyCategoryError = useMemo(() => {
+		const serverError = serverErrors.quoting_property_classification;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyCategoryType) {
+			return validatePropertyField.propertyCategory(propertyCategoryValue, true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_property_classification, propertyCategoryValue, showPropertyCategoryType, showValidationErrors]);
 
-	const propertyClassificationError = !(quoteEditable.property_classification ?? "")
-		? (quotingErrors.quoting_property_classification ?? (showQuotingErrors ? "Required" : undefined))
-		: undefined;
-	const propertyTypeError = !(quoteEditable.property_type ?? "")
-		? (quotingErrors.quoting_property_type ?? (showQuotingErrors ? "Required" : undefined))
-		: undefined;
+	// Real-time validation for property type (services 5, 6, 7, 8, 9)
+	const propertyTypeErrorSpecialized = useMemo(() => {
+		const serverError = serverErrors.quoting_property_type;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyCategoryType) {
+			return validatePropertyField.propertyType(propertyTypeValue, true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_property_type, propertyTypeValue, showPropertyCategoryType, showValidationErrors]);
+
+	// Real-time validation for construction stages specific fields (service 5)
+	const areaSizeError = useMemo(() => {
+		const serverError = serverErrors.area_sq;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && serviceId === 5) {
+			return validatePropertyField.areaSize(areaSizeValue);
+		}
+		return undefined;
+	}, [serverErrors.area_sq, areaSizeValue, serviceId, showValidationErrors]);
+
+	const numberOfLevelsError = useMemo(() => {
+		const serverError = serverErrors.number_of_levels;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && serviceId === 5) {
+			return validatePropertyField.levels(numberOfLevelsValue, true);
+		}
+		return undefined;
+	}, [serverErrors.number_of_levels, numberOfLevelsValue, serviceId, showValidationErrors]);
+
+	// Real-time validation for property details (for services that need full property details)
+	const propertyClassificationError = useMemo(() => {
+		const serverError = serverErrors.quoting_property_classification;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails) {
+			return validatePropertyField.propertyCategory(quoteEditable.property_classification ?? "", true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_property_classification, quoteEditable.property_classification, showPropertyDetails, showValidationErrors]);
+
+	const propertyTypeError = useMemo(() => {
+		const serverError = serverErrors.quoting_property_type;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails) {
+			return validatePropertyField.propertyType(quoteEditable.property_type ?? "", true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_property_type, quoteEditable.property_type, showPropertyDetails, showValidationErrors]);
+
 	const isApartmentUnit = useMemo(() => {
 		const t = (quoteEditable.property_type ?? "").toLowerCase();
 		return t === "apartment/unit";
 	}, [quoteEditable.property_type]);
+
+	// Clear apartment-specific fields when apartment is selected
 	useEffect(() => {
 		if (!isApartmentUnit) return;
 		const hasAny = Boolean((quoteEditable.levels ?? "") || (quoteEditable.has_basement_or_subfloor ?? "") || (quoteEditable.additional_structures ?? ""));
@@ -260,30 +329,47 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 			}));
 		}
 	}, [isApartmentUnit, quoteEditable.levels, quoteEditable.has_basement_or_subfloor, quoteEditable.additional_structures]);
-	const bedroomsError = (() => {
-		const value = quoteEditable.bedrooms_including_study ?? "";
-		if (!value) return quotingErrors.quoting_bedrooms_including_study ?? (showQuotingErrors ? "Required" : undefined);
-		if (!isNumericString(value)) return quotingErrors.quoting_bedrooms_including_study ?? "Must be a number";
+
+	const bedroomsError = useMemo(() => {
+		const serverError = serverErrors.quoting_bedrooms_including_study;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails) {
+			return validatePropertyField.bedrooms(quoteEditable.bedrooms_including_study ?? "");
+		}
 		return undefined;
-	})();
-	const bathroomsError = (() => {
-		const value = quoteEditable.bathrooms_rounded ?? "";
-		if (!value) return quotingErrors.quoting_bathrooms_rounded ?? (showQuotingErrors ? "Required" : undefined);
-		if (!isNumericString(value)) return quotingErrors.quoting_bathrooms_rounded ?? "Must be a number";
+	}, [serverErrors.quoting_bedrooms_including_study, quoteEditable.bedrooms_including_study, showPropertyDetails, showValidationErrors]);
+
+	const bathroomsError = useMemo(() => {
+		const serverError = serverErrors.quoting_bathrooms_rounded;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails) {
+			return validatePropertyField.bathrooms(quoteEditable.bathrooms_rounded ?? "");
+		}
 		return undefined;
-	})();
-	const levelsError = (() => {
-		if (isApartmentUnit) return undefined;
-		const value = quoteEditable.levels ?? "";
-		if (!value) return quotingErrors.quoting_levels ?? (showQuotingErrors ? "Required" : undefined);
-		// No longer validate as numeric since it's now a dropdown with text values
-		return quotingErrors.quoting_levels;
-	})();
-	const basementError = isApartmentUnit
-		? undefined
-		: (!(quoteEditable.has_basement_or_subfloor ?? "")
-			? (quotingErrors.quoting_has_basement_or_subfloor ?? (showQuotingErrors ? "Required" : undefined))
-			: undefined);
+	}, [serverErrors.quoting_bathrooms_rounded, quoteEditable.bathrooms_rounded, showPropertyDetails, showValidationErrors]);
+
+	const levelsError = useMemo(() => {
+		const serverError = serverErrors.quoting_levels;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails && !isApartmentUnit) {
+			return validatePropertyField.levels(quoteEditable.levels ?? "", true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_levels, quoteEditable.levels, showPropertyDetails, isApartmentUnit, showValidationErrors]);
+
+	const basementError = useMemo(() => {
+		const serverError = serverErrors.quoting_has_basement_or_subfloor;
+		if (serverError) return serverError;
+		
+		if (showValidationErrors && showPropertyDetails && !isApartmentUnit) {
+			return validatePropertyField.basement(quoteEditable.has_basement_or_subfloor ?? "", true);
+		}
+		return undefined;
+	}, [serverErrors.quoting_has_basement_or_subfloor, quoteEditable.has_basement_or_subfloor, showPropertyDetails, isApartmentUnit, showValidationErrors]);
+
 	const additionalStructuresError = undefined;
 
 	const missingCoreCounts = useMemo(() => {
@@ -296,6 +382,46 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		return isEmpty(quoteEditable.bedrooms_including_study) && isEmpty(quoteEditable.bathrooms_rounded) && isEmpty(quoteEditable.levels);
 	}, [quoteEditable, isApartmentUnit]);
 
+	// Comprehensive form validation
+	const isFormValid = useMemo(() => {
+		const validationData: PropertyValidationData = {
+			full_address: addressLabel,
+			addressSelected,
+			propertyCategoryValue: showPropertyCategoryType ? propertyCategoryValue : quoteEditable.property_classification,
+			propertyTypeValue: showPropertyCategoryType ? propertyTypeValue : quoteEditable.property_type,
+			areaSizeValue: serviceId === 5 ? areaSizeValue : undefined,
+			numberOfLevelsValue: serviceId === 5 ? numberOfLevelsValue : undefined,
+			bedroomsValue: showPropertyDetails ? quoteEditable.bedrooms_including_study : undefined,
+			bathroomsValue: showPropertyDetails ? quoteEditable.bathrooms_rounded : undefined,
+			levelsValue: showPropertyDetails ? quoteEditable.levels : undefined,
+			basementValue: showPropertyDetails ? quoteEditable.has_basement_or_subfloor : undefined,
+			serviceId,
+			showPropertyCategoryType: Boolean(showPropertyCategoryType),
+			showPropertyDetails: Boolean(showPropertyDetails),
+			isApartmentUnit
+		};
+
+		const errors = validatePropertyForm(validationData);
+		return Object.keys(errors).length === 0;
+	}, [
+		addressLabel,
+		addressSelected,
+		propertyCategoryValue,
+		propertyTypeValue,
+		areaSizeValue,
+		numberOfLevelsValue,
+		quoteEditable.property_classification,
+		quoteEditable.property_type,
+		quoteEditable.bedrooms_including_study,
+		quoteEditable.bathrooms_rounded,
+		quoteEditable.levels,
+		quoteEditable.has_basement_or_subfloor,
+		serviceId,
+		showPropertyCategoryType,
+		showPropertyDetails,
+		isApartmentUnit
+	]);
+
 	// No defaults needed
 
 	// Navigate to next step on success
@@ -304,6 +430,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 			window.location.replace(state.nextUrl);
 		}
 	}, [state?.success, state?.nextUrl]);
+
 
 	// Address autocomplete fetcher
 	useEffect(() => {
@@ -371,6 +498,46 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 
 	// Debug state - simplified to avoid function serialization issues
 	console.log("[PropertiesForm] Rendering form - serviceId:", serviceId, "showPropertyDetails:", showPropertyDetails, "extracting:", extracting, "addressSelected:", addressSelected);
+	console.log("[PropertiesForm] Property data:", { 
+		id: property?.id, 
+		number_of_levels: property?.number_of_levels,
+		property_category: property?.property_category 
+	});
+	console.log("[PropertiesForm] QuoteEditable levels:", quoteEditable.levels);
+	console.log("[PropertiesForm] NumberOfLevelsValue:", numberOfLevelsValue);
+	console.log("[PropertiesForm] InitializedFromProperty:", initializedFromProperty);
+	console.log("[PropertiesForm] Form state:", { submitted, success: state?.success, nextUrl: state?.nextUrl });
+	console.log("[PropertiesForm] Validation state:", { 
+		hasUserInteracted, 
+		showValidationErrors, 
+		isFormValid, 
+		addressSelected, 
+		addressLabel: addressLabel || "empty",
+		hasExistingIncompleteData,
+		showValidationAttempted
+	});
+
+	// Show full page skeleton loading while form is being submitted or after success (until redirect to step 3)
+	if (submitted || state?.success) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<PhoneVerificationSkeleton />
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div style={cardStyle}>
@@ -384,7 +551,10 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 				</NoteBox>
 			) : null}
 
-			<form action={formAction} className="form-grid" style={gridStyle} noValidate aria-busy={extracting} onSubmit={() => setSubmitted(true)}>
+			<form action={formAction} className="form-grid" style={gridStyle} noValidate aria-busy={extracting} onSubmit={(e) => {
+				setSubmitted(true);
+				setHasUserInteracted(true);
+			}}>
 				<input type="hidden" name="contact_id" value={contactId ?? ""} />
 				<input type="hidden" name="user_id" value={userId ?? ""} />
 				<input type="hidden" name="deal_id" value={dealId ?? ""} />
@@ -401,7 +571,8 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 						submitSelectedLabel
 						placeholder="Start typing address"
 						disableClientFilter
-						onInputChange={extracting ? undefined : (q) => { setAddressQuery(q); setAddressSelected(false); }}
+						required={false}
+						onInputChange={extracting ? undefined : (q) => { setAddressQuery(q); setAddressSelected(false); setHasUserInteracted(true); }}
 						onSelect={(opt) => {
 							const s = addressSuggestions.find((x) => x.id === opt.value);
 							if (s) {
@@ -479,7 +650,6 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 								}
 							}
 						}}
-						required={true}
 						loading={extracting || addressLoading}
 						error={addressError}
 						autoComplete="off"
@@ -499,9 +669,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							name="quoting_property_classification"
 							label="Property Classification"
 							value={propertyCategoryValue}
-							onChange={(e) => setPropertyCategoryValue(e.target.value)}
+							onChange={(e) => { setPropertyCategoryValue(e.target.value); setHasUserInteracted(true); }}
 							error={propertyCategoryError}
-							required
+							required={false}
 							options={[
 								{ value: "", label: "Select classification" },
 								{ value: "Residential", label: "Residential" },
@@ -512,9 +682,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							name="quoting_property_type"
 							label="Property Type"
 							value={propertyTypeValue}
-							onChange={(e) => setPropertyTypeValue(e.target.value)}
+							onChange={(e) => { setPropertyTypeValue(e.target.value); setHasUserInteracted(true); }}
 							error={propertyTypeErrorSpecialized}
-							required
+							required={false}
 							options={[
 								{ value: "", label: "Select type" },
 								{ value: "House", label: "House" },
@@ -536,9 +706,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 									name="area_sq"
 									label="Area Size (sq m)"
 									value={areaSizeValue}
-									onChange={(e) => setAreaSizeValue(e.target.value)}
+									onChange={(e) => { setAreaSizeValue(e.target.value); setHasUserInteracted(true); }}
 									error={areaSizeError}
-									required
+									required={false}
 									inputMode="numeric"
 									pattern="^\\d+(\\.\\d+)?$"
 									placeholder="Enter area in square meters"
@@ -547,8 +717,8 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 									name="number_of_levels"
 									label="Levels"
 									value={numberOfLevelsValue}
-									onChange={(e) => setNumberOfLevelsValue(e.target.value)}
-									required
+									onChange={(e) => { setNumberOfLevelsValue(e.target.value); setHasUserInteracted(true); }}
+									required={false}
 									error={numberOfLevelsError}
 									options={[
 										{ value: "", label: "Select" },
@@ -594,9 +764,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							name="quoting_property_classification"
 							label="Property classification"
 							value={quoteEditable.property_classification ?? ""}
-							onChange={(e) => setQuoteEditable((p) => ({ ...p, property_classification: e.target.value }))}
+							onChange={(e) => { setQuoteEditable((p) => ({ ...p, property_classification: e.target.value })); setHasUserInteracted(true); }}
 							error={propertyClassificationError}
-							required
+							required={false}
 							options={[
 								{ value: "", label: "Select classification" },
 								{ value: "Residential", label: "Residential" },
@@ -607,9 +777,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							name="quoting_property_type"
 							label="Property type"
 							value={quoteEditable.property_type ?? ""}
-							onChange={(e) => setQuoteEditable((p) => ({ ...p, property_type: e.target.value }))}
+							onChange={(e) => { setQuoteEditable((p) => ({ ...p, property_type: e.target.value })); setHasUserInteracted(true); }}
 							error={propertyTypeError}
-							required
+							required={false}
 							options={[
 								{ value: "", label: "Select type" },
 								{ value: "House", label: "House" },
@@ -624,20 +794,20 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 							name="quoting_bedrooms_including_study"
 							label="Bedrooms (including study)"
 							value={quoteEditable.bedrooms_including_study ?? ""}
-							onChange={(e) => setQuoteEditable((p) => ({ ...p, bedrooms_including_study: e.target.value }))}
+							onChange={(e) => { setQuoteEditable((p) => ({ ...p, bedrooms_including_study: e.target.value })); setHasUserInteracted(true); }}
 							inputMode="numeric"
 							pattern="^\\d+$"
-							required
+							required={false}
 							error={bedroomsError}
 						/>
 						<TextField
 							name="quoting_bathrooms_rounded"
 							label="Bathrooms (rounded)"
 							value={quoteEditable.bathrooms_rounded ?? ""}
-							onChange={(e) => setQuoteEditable((p) => ({ ...p, bathrooms_rounded: e.target.value }))}
+							onChange={(e) => { setQuoteEditable((p) => ({ ...p, bathrooms_rounded: e.target.value })); setHasUserInteracted(true); }}
 							inputMode="numeric"
 							pattern="^\\d+$"
-							required
+							required={false}
 							error={bathroomsError}
 						/>
 						{!isApartmentUnit ? (
@@ -646,8 +816,8 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 									name="quoting_levels"
 									label="Levels"
 									value={quoteEditable.levels ?? ""}
-									onChange={(e) => setQuoteEditable((p) => ({ ...p, levels: e.target.value }))}
-									required
+									onChange={(e) => { setQuoteEditable((p) => ({ ...p, levels: e.target.value })); setHasUserInteracted(true); }}
+									required={false}
 									error={levelsError}
 									options={[
 										{ value: "", label: "Select" },
@@ -661,9 +831,9 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 									name="quoting_has_basement_or_subfloor"
 									label="Basement/Subfloor"
 									value={quoteEditable.has_basement_or_subfloor ?? ""}
-									onChange={(e) => setQuoteEditable((p) => ({ ...p, has_basement_or_subfloor: e.target.value }))}
+									onChange={(e) => { setQuoteEditable((p) => ({ ...p, has_basement_or_subfloor: e.target.value })); setHasUserInteracted(true); }}
 									error={basementError}
-									required
+									required={false}
 									options={[
 										{ value: "", label: "Select" },
 										{ value: "Yes", label: "Yes" },
@@ -677,7 +847,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 										label="Additional structures"
 										placeholder="e.g. Shed, Granny flat"
 										value={quoteEditable.additional_structures ?? ""}
-										onChange={(e) => setQuoteEditable((p) => ({ ...p, additional_structures: e.target.value }))}
+										onChange={(e) => { setQuoteEditable((p) => ({ ...p, additional_structures: e.target.value })); setHasUserInteracted(true); }}
 										error={additionalStructuresError}
 									/>
 								</div>
@@ -778,7 +948,18 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 
 				<div style={{ ...actionsStyle, gridColumn: "1 / -1", pointerEvents: extracting ? "none" : undefined, opacity: extracting ? 0.6 : 1 }}>
 					<PreviousButton href={extracting ? undefined : prevHref} />
-					<NextButton disabled={extracting || Boolean(showPropertyCategoryType && (!addressSelected || !propertyCategoryValue || !propertyTypeValue || (serviceId === 5 && (!areaSizeValue || !numberOfLevelsValue))))} />
+					<NextButton 
+						disabled={extracting} 
+						onClick={(e) => {
+							if (!isFormValid) {
+								e.preventDefault();
+								setHasUserInteracted(true);
+								setShowValidationAttempted(true);
+								return;
+							}
+							// If form is valid, let the normal submission proceed
+						}}
+					/>
 				</div>
 			</form>
 		</div>

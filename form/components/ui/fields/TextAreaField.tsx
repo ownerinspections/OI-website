@@ -25,12 +25,18 @@ function validateTextAreaField(value: string, required?: boolean): string | unde
 export default function TextAreaField({ name, label, defaultValue, value, error, rows = 4, required, onChange, ...rest }: TextAreaFieldProps) {
 	const [clientError, setClientError] = useState<string | undefined>();
 
-	const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		const fieldValue = e.target.value;
-		const validationError = validateTextAreaField(fieldValue, required);
-		setClientError(validationError);
-		onChange?.(e);
-	};
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const fieldValue = e.target.value;
+    // Only show client validation if there's no server error
+    if (!error) {
+      const validationError = validateTextAreaField(fieldValue, required);
+      setClientError(validationError);
+    } else {
+      // Clear client error when there's a server error
+      setClientError(undefined);
+    }
+    onChange?.(e);
+  };
 
 	// Show server error if present, otherwise show client validation error
 	const displayError = error || clientError;

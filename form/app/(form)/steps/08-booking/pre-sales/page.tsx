@@ -9,6 +9,7 @@ import TextField from "@/components/ui/fields/TextField";
 import EmailField from "@/components/ui/fields/EmailField";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
 import { submitBooking } from "@/lib/actions/bookings/submitBooking";
+import { formatPropertyLevels, formatPropertyBasement } from "@/lib/utils/propertyFormatting";
 
 type ContactRecord = { id: string | number; first_name?: string | null; last_name?: string | null; phone?: string | null; email?: string | null; contact_type?: string | null };
 
@@ -65,6 +66,11 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
             console.error(`Failed to load contacts from os_deals_contacts for deal ${dealId}:`, error);
         }
     }
+
+    // Deduplicate contacts by ID to prevent duplicate keys
+    const uniqueContactsList = contactsList.filter((contact, index, self) => 
+        index === self.findIndex(c => String(c.id) === String(contact.id))
+    );
 
     // Load properties via junction
     const propsRes = await getRequest<{ data: Array<{ property_id: any }> }>(
@@ -180,12 +186,15 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                                    p?.property_category?.toLowerCase().includes('unit');
                                 
                                 if (!isApartment) {
-                                    pushDetail("Levels", p?.number_of_levels || p?.levels || p?.storeys);
-                                    if (typeof p?.basement === "boolean") {
-                                        pushDetail("Basement/Subfloor", p.basement ? "Yes" : "No");
-                                    } else {
-                                        pushDetail("Basement/Subfloor", p?.basement || p?.subfloor || p?.has_basement);
+                                    const levelsValue = p?.number_of_levels || p?.levels || p?.storeys;
+                                    const formattedLevels = formatPropertyLevels(levelsValue);
+                                    if (formattedLevels) {
+                                        pushDetail("Levels", formattedLevels);
                                     }
+                                    
+                                    const basementValue = p?.basement || p?.subfloor || p?.has_basement;
+                                    const formattedBasement = formatPropertyBasement(basementValue);
+                                    pushDetail("Basement/Subfloor", formattedBasement);
                                 }
 
                                 // Create balanced layout with address included
@@ -636,7 +645,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                             {/* Contacts block: read-only display */}
                             <div>
                                 <div style={{ fontWeight: 600, marginBottom: 12 }}>Contacts</div>
-                                {contactsList.length === 0 ? (
+                                {uniqueContactsList.length === 0 ? (
                                     <div style={{ 
                                         display: "grid", 
                                         gap: 8, 
@@ -650,7 +659,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                     </div>
                                 ) : (
                                     <div style={{ display: "grid", gap: 16 }}>
-                                        {contactsList
+                                        {uniqueContactsList
                                             .sort((a, b) => {
                                                 // Sort contact person to the top for better visibility
                                                 const aIsContactPerson = contactPersonId && String(contactPersonId) === String(a.id);
@@ -999,7 +1008,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                 quoteId={quoteId}
                                 invoiceId={invoiceId}
                                 inspection_type="pre_sales"
-                                contactsList={contactsList}
+                                contactsList={uniqueContactsList}
                                 booking={booking}
                                 properties={propertiesExpanded}
                             />

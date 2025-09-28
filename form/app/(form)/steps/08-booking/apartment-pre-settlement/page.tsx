@@ -9,6 +9,7 @@ import TextField from "@/components/ui/fields/TextField";
 import EmailField from "@/components/ui/fields/EmailField";
 import AuPhoneField from "@/components/ui/fields/AuPhoneField";
 import { submitBooking } from "@/lib/actions/bookings/submitBooking";
+import { formatPropertyLevels, formatPropertyBasement } from "@/lib/utils/propertyFormatting";
 
 type ContactRecord = { id: string | number; first_name?: string | null; last_name?: string | null; phone?: string | null; email?: string | null; contact_type?: string | null };
 
@@ -40,7 +41,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
 
 
     // Load contacts from os_deals_contacts junction table
-    const contactsList: ContactRecord[] = [];
+    const uniqueContactsList: ContactRecord[] = [];
     if (dealId) {
         try {
             const contactsRes = await getRequest<{ data: Array<{ contacts_id: any }> }>(
@@ -51,7 +52,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
             // Normalize contacts list
             for (const contact of contactsExpanded) {
                 if (typeof contact === "object" && contact) {
-                    contactsList.push({
+                    uniqueContactsList.push({
                         id: contact.id,
                         first_name: contact.first_name,
                         last_name: contact.last_name,
@@ -180,12 +181,15 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                                    p?.property_category?.toLowerCase().includes('unit');
                                 
                                 if (!isApartment) {
-                                    pushDetail("Levels", p?.number_of_levels || p?.levels || p?.storeys);
-                                    if (typeof p?.basement === "boolean") {
-                                        pushDetail("Basement/Subfloor", p.basement ? "Yes" : "No");
-                                    } else {
-                                        pushDetail("Basement/Subfloor", p?.basement || p?.subfloor || p?.has_basement);
+                                    const levelsValue = p?.number_of_levels || p?.levels || p?.storeys;
+                                    const formattedLevels = formatPropertyLevels(levelsValue);
+                                    if (formattedLevels) {
+                                        pushDetail("Levels", formattedLevels);
                                     }
+                                    
+                                    const basementValue = p?.basement || p?.subfloor || p?.has_basement;
+                                    const formattedBasement = formatPropertyBasement(basementValue);
+                                    pushDetail("Basement/Subfloor", formattedBasement);
                                 }
 
                                 // Create balanced layout with address included
@@ -557,7 +561,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                             {/* Contacts block: read-only display */}
                             <div>
                                 <div style={{ fontWeight: 600, marginBottom: 12 }}>Contacts</div>
-                                {contactsList.length === 0 ? (
+                                {uniqueContactsList.length === 0 ? (
                                     <div style={{ 
                                         display: "grid", 
                                         gap: 8, 
@@ -571,7 +575,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                     </div>
                                 ) : (
                                     <div style={{ display: "grid", gap: 16 }}>
-                                        {contactsList
+                                        {uniqueContactsList
                                             .sort((a, b) => {
                                                 // Sort contact person to the top for better visibility
                                                 const aIsContactPerson = contactPersonId && String(contactPersonId) === String(a.id);
@@ -920,7 +924,7 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                                 quoteId={quoteId}
                                 invoiceId={invoiceId}
                                 inspection_type="apartment-pre-settlement"
-                                contactsList={contactsList}
+                                contactsList={uniqueContactsList}
                                 booking={booking}
                                 properties={propertiesExpanded}
                             />

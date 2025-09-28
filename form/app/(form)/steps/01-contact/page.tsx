@@ -1,12 +1,11 @@
-import ContactsForm from "@/components/contacts/ContactsForm";
+import ContactPageClient from "@/components/contacts/ContactPageClient";
 import { listAllServices } from "@/lib/actions/services/getService";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { getContact } from "@/lib/actions/contacts/getContact";
 import { getUser } from "@/lib/actions/users/getUser";
 // import { getProperty } from "@/lib/actions/properties/getProperty";
-import FormHeader from "@/components/ui/FormHeader";
 import { getContactNote } from "@/lib/actions/globals/getGlobal";
-import NoteBox from "@/components/ui/messages/NoteBox";
+import { fetchCompanyInfo } from "@/lib/actions/invoices/createInvoice";
 
 export default async function StepContact({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
 	const params = (await searchParams) ?? {};
@@ -18,10 +17,11 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 	// const categoryParam = typeof params.category === "string" ? (params.category as "residential" | "commercial") : undefined;
 
 	// First batch: Run independent API calls in parallel
-	const [services, deal, contactNote] = await Promise.all([
+	const [services, deal, contactNote, company] = await Promise.all([
 		listAllServices(),
 		dealId ? getDeal(dealId).catch(() => null) : Promise.resolve(null),
 		getContactNote(),
+		fetchCompanyInfo(),
 	]);
 
 	const resolvedContactId = contactIdParam ?? (deal?.contact ? String(deal.contact) : undefined);
@@ -56,19 +56,15 @@ export default async function StepContact({ searchParams }: { searchParams?: Pro
 	return (
 		<div className="container">
 			<div className="card">
-				<FormHeader rightTitle="Contact details" />
-				{contactNote ? (
-					<NoteBox style={{ marginBottom: 16 }}>
-						{contactNote}
-					</NoteBox>
-				) : null}
-				<ContactsForm
+				<ContactPageClient
 					services={services}
 					dealId={dealId}
 					contactId={resolvedContactId}
 					propertyId={resolvedPropertyId}
 					userId={userIdParam}
 					initialValues={initialValues}
+					contactNote={contactNote}
+					company={company}
 				/>
 			</div>
 		</div>

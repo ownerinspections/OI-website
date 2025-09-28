@@ -10,6 +10,7 @@ interface ViewBookingButtonProps {
     propertyId?: string;
     quoteId?: string;
     invoiceId?: string;
+    onNavigate?: () => void;
 }
 
 export default function ViewBookingButton({ 
@@ -19,11 +20,17 @@ export default function ViewBookingButton({
     dealId, 
     propertyId, 
     quoteId, 
-    invoiceId 
+    invoiceId,
+    onNavigate
 }: ViewBookingButtonProps) {
     const router = useRouter();
 
     const handleViewBooking = () => {
+        // Call the navigation callback if provided
+        if (onNavigate) {
+            onNavigate();
+        }
+        
         const params = new URLSearchParams();
         if (bookingId) params.set("bookingId", bookingId);
         if (userId) params.set("userId", userId);

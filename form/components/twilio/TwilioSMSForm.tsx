@@ -15,6 +15,7 @@ import SuccessBox from "@/components/ui/messages/SuccessBox";
 import ErrorBox from "@/components/ui/messages/ErrorBox";
 import WarningBox from "@/components/ui/messages/WarningBox";
 import { getStepUrl, getRouteTypeFromServiceType } from "@/lib/config/service-routing";
+import { QuoteFormSkeleton } from "@/components/ui/SkeletonLoader";
 
 type Props = { phone?: string; contactId?: string; dealId?: string; propertyId?: string; quoteId?: string; userId?: string; redirectSeconds?: number; serviceType?: string };
 
@@ -33,7 +34,6 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 	const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
 	const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
 	const [codeExpired, setCodeExpired] = useState<boolean>(false);
-	const [verifiedTo, setVerifiedTo] = useState<string | null>(null);
 
 	const headerStyle: React.CSSProperties = { marginBottom: 12 };
 	const cardStyle: React.CSSProperties = { minHeight: 88 };
@@ -161,8 +161,6 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 			setCodeError(verifyState.errors.code);
 		}
 		if (verifyState && verifyState.success) {
-			// Refresh the server-rendered page so header status reflects "Verified"
-			try { router.refresh(); } catch {}
 			const params = new URLSearchParams();
 			// Required order: userId, contactId, dealId, propertyId, quoteId
 			if (userId) params.set("userId", String(userId));
@@ -188,7 +186,8 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 			}
 			
 			const url = `${quoteUrl}?${params.toString()}`;
-			setVerifiedTo(url);
+			// Use window.location.assign for immediate navigation
+			window.location.assign(url);
 		}
 	}, [verifyState, dealId, contactId, propertyId, quoteId, userId, router, serviceType]);
 
@@ -287,9 +286,28 @@ export default function TwilioSMSForm({ phone, contactId, dealId, propertyId, qu
 
  
 
-	if (verifiedTo) {
-		return <AlreadyVerified to={verifiedTo} seconds={redirectSeconds} />;
+	// Show full page skeleton loading while verification is being processed or after success (until redirect to step 4)
+	if (verifyState?.success) {
+		return (
+			<div style={{ 
+				position: "fixed", 
+				top: 0, 
+				left: 0, 
+				right: 0, 
+				bottom: 0, 
+				background: "var(--color-pale-gray)", 
+				zIndex: 9999,
+				overflow: "auto"
+			}}>
+				<div className="container">
+					<div className="card">
+						<QuoteFormSkeleton />
+					</div>
+				</div>
+			</div>
+		);
 	}
+
 
 	return (
 		<>

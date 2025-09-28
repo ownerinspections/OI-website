@@ -35,7 +35,7 @@ type AutoFillFieldProps = {
 
 function validateAutoFillField(selectedValue: string, required?: boolean): string | undefined {
 	if (required && !selectedValue?.trim()) {
-		return VALIDATION_MESSAGES.SELECT_OPTION;
+		return VALIDATION_MESSAGES.REQUIRED;
 	}
 	return undefined;
 }
@@ -121,9 +121,14 @@ export default function AutoFillField({
 		setOpen(false);
 		setActiveIndex(-1);
 		
-		// Validate the selection
-		const validationError = validateAutoFillField(opt.value, required);
-		setClientError(validationError);
+		// Validate the selection only if there's no server error
+		if (!error) {
+			const validationError = validateAutoFillField(opt.value, required);
+			setClientError(validationError);
+		} else {
+			// Clear client error when there's a server error
+			setClientError(undefined);
+		}
 		
 		if (typeof onSelect === "function") onSelect(opt);
 		// Blur the input to move cursor out after selecting an option

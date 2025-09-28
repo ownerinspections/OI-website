@@ -1,5 +1,5 @@
 import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
-import { ensureBooking } from "@/lib/actions/bookings/createBooking";
+import ReceiptPageClient from "@/components/receipts/ReceiptPageClient";
 import { closeDealFromInvoice } from "@/lib/actions/deals/closeDealFromInvoice";
 import { updateQuoteStatusToPaid } from "@/lib/actions/quotes/updateQuoteStatus";
 import Stripe from "stripe";
@@ -448,6 +448,14 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
     const receiptNote = await getReceiptNote();
 
     return (
+        <ReceiptPageClient
+            invoiceId={String(invoice?.id)}
+            propertyId={propertyId}
+            userId={userId}
+            contactId={contactId}
+            dealId={dealId}
+            quoteId={quoteId}
+        >
         <div className="container">
             <div className="card">
                 <FormHeader
@@ -547,66 +555,8 @@ export default async function ConstructionStagesReceiptStep({ searchParams }: { 
                     </div>
                     {/* Status row removed from totals */}
                 </div>
-                <div className="button-container" style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-                    {/* Server Action button: create booking from invoice/property/contact/user and go to Step 08 */}
-                    <form action={async () => {
-                        "use server";
-                        if (!invoice?.id) return;
-                        // Resolve propertyId: prefer URL param; fallback via deal -> property
-                        let propertyIdEffective: string | undefined = propertyId ? String(propertyId) : undefined;
-                        if (!propertyIdEffective && dealId) {
-                            try {
-                                const dealRes = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=properties`);
-                                const propsArr = (dealRes as any)?.data?.properties;
-                                const p = Array.isArray(propsArr) && propsArr.length > 0 ? propsArr[0] : undefined;
-                                if (p !== undefined && p !== null) propertyIdEffective = String(p);
-                            } catch {}
-                        }
-                        if (!propertyIdEffective && invoice?.id) {
-                            try {
-                                // Try infer from invoice -> proposal -> deal -> property chain if available
-                                const invRes = await getRequest<{ data: { proposal?: (string | number)[] } }>(`/items/os_invoices/${encodeURIComponent(String(invoice.id))}?fields=proposal`);
-                                const propArr = (invRes as any)?.data?.proposal;
-                                const firstProposalId = Array.isArray(propArr) && propArr.length > 0 ? String(propArr[0]) : undefined;
-                                if (firstProposalId) {
-                                    const propRes = await getRequest<{ data: { deal?: string | number } }>(`/items/os_proposals/${encodeURIComponent(firstProposalId)}?fields=deal`);
-                                    const d = (propRes as any)?.data?.deal;
-                                    if (d) {
-                                        const dealRes2 = await getRequest<{ data: { properties?: Array<string | number> } }>(`/items/os_deals/${encodeURIComponent(String(d))}?fields=properties`);
-                                        const propsArr2 = (dealRes2 as any)?.data?.properties;
-                                        const p2 = Array.isArray(propsArr2) && propsArr2.length > 0 ? propsArr2[0] : undefined;
-                                        if (p2 !== undefined && p2 !== null) propertyIdEffective = String(p2);
-                                    }
-                                }
-                            } catch {}
-                        }
-                        if (!propertyIdEffective) return;
-
-                        const booking = await ensureBooking({
-                            invoiceId: String(invoice.id),
-                            propertyId: propertyIdEffective,
-                            userId: userId ? String(userId) : undefined,
-                            contactId: (contactId || invoice?.contact) ? String(contactId || invoice?.contact) : undefined,
-                            dealId: dealId ? String(dealId) : undefined,
-                            quoteId: quoteId ? String(quoteId) : undefined,
-                        });
-
-                        const sp = new URLSearchParams();
-                        if (userId) sp.set("userId", String(userId));
-                        if (contactId) sp.set("contactId", String(contactId));
-                        if (dealId) sp.set("dealId", String(dealId));
-                        if (propertyIdEffective) sp.set("propertyId", String(propertyIdEffective));
-                        if (quoteId) sp.set("quoteId", String(quoteId));
-                        if (invoice?.id) sp.set("invoiceId", String(invoice.id));
-                        if (booking?.id) sp.set("bookingId", String(booking.id));
-
-                        redirect(`/steps/08-booking?${sp.toString()}`);
-                    }}>
-                        <button type="submit" className="button-primary">Book Now</button>
-                    </form>
-                </div>
             </div>
-        </div>
+        </ReceiptPageClient>
     );
 }
 

@@ -14,6 +14,8 @@ import SuccessBox from "@/components/ui/messages/SuccessBox";
 import WarningBox from "@/components/ui/messages/WarningBox";
 import ErrorBox from "@/components/ui/messages/ErrorBox";
 import NoteBox from "@/components/ui/messages/NoteBox";
+import { validatePropertyField } from "@/lib/validation/propertyValidation";
+import { QuoteFormSkeleton } from "@/components/ui/SkeletonLoader";
 
 type Props = {
 	properties?: PropertyRecord[];
@@ -56,6 +58,11 @@ export default function DilapidationPropertiesForm({
 			window.location.replace(state.nextUrl);
 		}
 	}, [state?.success, state?.nextUrl]);
+
+	// Show skeleton loading while form is being submitted or after success (until redirect to step 4)
+	if (submitted || state?.success) {
+		return <QuoteFormSkeleton />;
+	}
 
 	// Use same styling as PropertiesForm
 	const cardStyle: React.CSSProperties = { padding: 16 };
@@ -255,12 +262,23 @@ function PropertyFormSection({
 				}
 				return "";
 			}
+			// Map levels to dropdown text values
+			const levelsValue = (() => {
+				const levels = property?.number_of_levels;
+				if (!levels) return "";
+				// Map numeric levels back to text for dropdown
+				if (levels === 1) return "Single Storey";
+				if (levels === 2) return "Double Storey";
+				if (levels === 3) return "Triple Storey";
+				return "";
+			})();
+
 			setQuoteEditable({
 				property_classification: classification,
 				property_type: property?.property_type ?? "",
 				bedrooms_including_study: toNumericString(property?.number_of_bedrooms as unknown),
 				bathrooms_rounded: toNumericString(property?.number_of_bathrooms as unknown),
-				levels: toNumericString(property?.number_of_levels as unknown),
+				levels: levelsValue,
 				has_basement_or_subfloor: basementValue,
 				additional_structures: typeof property?.additional_structures === "string" ? property!.additional_structures! : "",
 			});
@@ -442,7 +460,7 @@ function PropertyFormSection({
 					disableClientFilter
 					onInputChange={(q) => { setAddressQuery(q); setAddressSelected(false); }}
 					onSelect={handleAddressSelect}
-					required={true}
+					required={false}
 					loading={extracting || addressLoading}
 					error={addressError}
 					autoComplete="off"
@@ -474,8 +492,8 @@ function PropertyFormSection({
 						label="Property classification"
 						value={quoteEditable.property_classification ?? ""}
 						onChange={(e) => setQuoteEditable((p) => ({ ...p, property_classification: e.target.value }))}
-						error={submitted && !quoteEditable.property_classification ? "Required" : undefined}
-						required
+						error={validatePropertyField.propertyCategory(quoteEditable.property_classification ?? "", true)}
+						required={false}
 						options={[
 							{ value: "", label: "Select classification" },
 							{ value: "Residential", label: "Residential" },
@@ -487,8 +505,8 @@ function PropertyFormSection({
 						label="Property type"
 						value={quoteEditable.property_type ?? ""}
 						onChange={(e) => setQuoteEditable((p) => ({ ...p, property_type: e.target.value }))}
-						error={submitted && !quoteEditable.property_type ? "Required" : undefined}
-						required
+						error={validatePropertyField.propertyType(quoteEditable.property_type ?? "", true)}
+						required={false}
 						options={[
 							{ value: "", label: "Select type" },
 							{ value: "House", label: "House" },
@@ -506,8 +524,8 @@ function PropertyFormSection({
 						onChange={(e) => setQuoteEditable((p) => ({ ...p, bedrooms_including_study: e.target.value }))}
 						inputMode="numeric"
 						pattern="^\\d+$"
-						required
-						error={submitted && !quoteEditable.bedrooms_including_study ? "Required" : undefined}
+						required={false}
+						error={validatePropertyField.bedrooms(quoteEditable.bedrooms_including_study ?? "")}
 					/>
 					<TextField
 						name={`property_${index}_quoting_bathrooms_rounded`}
@@ -516,8 +534,8 @@ function PropertyFormSection({
 						onChange={(e) => setQuoteEditable((p) => ({ ...p, bathrooms_rounded: e.target.value }))}
 						inputMode="numeric"
 						pattern="^\\d+$"
-						required
-						error={submitted && !quoteEditable.bathrooms_rounded ? "Required" : undefined}
+						required={false}
+						error={validatePropertyField.bathrooms(quoteEditable.bathrooms_rounded ?? "")}
 					/>
 					{!isApartmentUnit ? (
 						<>
@@ -526,8 +544,8 @@ function PropertyFormSection({
 								label="Levels"
 								value={quoteEditable.levels ?? ""}
 								onChange={(e) => setQuoteEditable((p) => ({ ...p, levels: e.target.value }))}
-								required
-								error={submitted && !quoteEditable.levels ? "Required" : undefined}
+								required={false}
+								error={validatePropertyField.levels(quoteEditable.levels ?? "", true)}
 								options={[
 									{ value: "", label: "Select" },
 									{ value: "Single Storey", label: "Single Storey" },
@@ -541,8 +559,8 @@ function PropertyFormSection({
 								label="Basement/Subfloor"
 								value={quoteEditable.has_basement_or_subfloor ?? ""}
 								onChange={(e) => setQuoteEditable((p) => ({ ...p, has_basement_or_subfloor: e.target.value }))}
-								error={submitted && !quoteEditable.has_basement_or_subfloor ? "Required" : undefined}
-								required
+								error={validatePropertyField.basement(quoteEditable.has_basement_or_subfloor ?? "", true)}
+								required={false}
 								options={[
 									{ value: "", label: "Select" },
 									{ value: "Yes", label: "Yes" },

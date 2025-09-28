@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 import PreviousButton from "@/components/ui/controls/PreviousButton";
+import { ReceiptSkeleton } from "@/components/ui/SkeletonLoader";
 
 type Props = {
     clientSecret: string;
@@ -21,6 +22,7 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref, invoiceId,
     const [submitting, setSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
+    const [isNavigating, setIsNavigating] = useState(false);
 
     const postUpdate = async (payload: Record<string, unknown>) => {
         try {
@@ -76,15 +78,39 @@ function InlineForm({ receiptHref, returnUrl, clientSecret, prevHref, invoiceId,
                     if (typeof (pi as any).client_secret === "string") {
                         url.searchParams.set("payment_intent_client_secret", (pi as any).client_secret);
                     }
+                    setIsNavigating(true);
                     window.location.href = url.toString();
                     return;
                 }
             } catch {}
+            setIsNavigating(true);
             window.location.href = receiptHref;
         } finally {
             setSubmitting(false);
         }
     }, [stripe, elements, receiptHref, clientSecret, returnUrl]);
+
+    // Show skeleton loading while navigating to step 7
+    if (isNavigating) {
+        return (
+            <div style={{ 
+                position: "fixed", 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                background: "var(--color-pale-gray)", 
+                zIndex: 9999,
+                overflow: "auto"
+            }}>
+                <div className="container">
+                    <div className="card">
+                        <ReceiptSkeleton />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>

@@ -46,6 +46,106 @@ input, select, textarea {
 .button-primary { background: var(--color-primary); color: var(--color-white); }
 .button-secondary { background: var(--color-secondary); color: var(--color-white); }
 
+/* Loading spinner animation */
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+/* Skeleton loading animations */
+@keyframes skeleton-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+@keyframes skeleton-shimmer {
+	0% { background-position: -200px 0; }
+	100% { background-position: calc(200px + 100%) 0; }
+}
+
+/* Skeleton loader base styles */
+.skeleton-loader {
+	background: linear-gradient(90deg, var(--color-pale-gray) 25%, var(--color-light-gray) 50%, var(--color-pale-gray) 75%);
+	background-size: 200px 100%;
+	animation: skeleton-shimmer 1.5s infinite;
+	border-radius: 4px;
+}
+
+.skeleton-field {
+	background: linear-gradient(90deg, var(--color-pale-gray) 25%, var(--color-light-gray) 50%, var(--color-pale-gray) 75%);
+	background-size: 200px 100%;
+	animation: skeleton-shimmer 1.5s infinite;
+	border-radius: 4px;
+	height: var(--field-height);
+}
+
+.skeleton-button {
+	background: linear-gradient(90deg, var(--color-pale-gray) 25%, var(--color-light-gray) 50%, var(--color-pale-gray) 75%);
+	background-size: 200px 100%;
+	animation: skeleton-shimmer 1.5s infinite;
+	border-radius: 6px;
+}
+
+.skeleton-text {
+	background: linear-gradient(90deg, var(--color-pale-gray) 25%, var(--color-light-gray) 50%, var(--color-pale-gray) 75%);
+	background-size: 200px 100%;
+	animation: skeleton-shimmer 1.5s infinite;
+	border-radius: 4px;
+	height: 16px;
+}
+
+.skeleton-text-container {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* Skeleton form layout */
+.skeleton-form {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	gap: 16px;
+}
+
+.skeleton-form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.skeleton-form-field-label {
+	height: 16px;
+	width: 80px;
+}
+
+.skeleton-form-field-input {
+	height: 44px;
+	width: 100%;
+}
+
+.skeleton-form-actions {
+	grid-column: 1 / -1;
+	display: flex;
+	justify-content: flex-end;
+}
+
+/* Mobile skeleton adjustments */
+@media (max-width: 640px) {
+	.skeleton-form {
+		grid-template-columns: 1fr;
+		gap: 12px;
+	}
+	
+	.skeleton-field {
+		height: 48px;
+	}
+	
+	.skeleton-button {
+		height: 48px;
+		width: 100%;
+	}
+}
+
 /* Enhanced touch targets for mobile */
 @media (max-width: 640px) {
 	.button-primary, .button-secondary { 

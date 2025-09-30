@@ -195,8 +195,35 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 	} catch {}
 
 	const isPaid = String(paymentStatus || "").toLowerCase() === "success";
-	const statusLabel = isPaid ? "Paid" : "Unpaid";
 	const invoiceNumber = String((invoice as any)?.invoice_id || invoiceId || "");
+
+	// Get service type from deal
+	let serviceType: string = "Service";
+	try {
+		if (dealId) {
+			const dealRes = await getRequest<{ data: { service?: number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service`);
+			const serviceId = (dealRes as any)?.data?.service || null;
+			
+			if (serviceId) {
+				const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(serviceId))}?fields=service_name,service_type`);
+				const service = (serviceRes as any)?.data || {};
+				serviceType = service.service_name || service.service_type || serviceType;
+			}
+		}
+	} catch (error) {
+		console.error('Failed to fetch service type:', error);
+	}
+
+	// Format service type for display
+	const formatServiceType = (type: string): string => {
+		return type
+			.replace(/_/g, ' ')
+			.replace(/-/g, ' ')
+			.split(' ')
+			.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(' ');
+	};
+	const formattedServiceType = formatServiceType(serviceType);
 
 	const paymentNote = await getPaymentNote();
 
@@ -217,7 +244,7 @@ export default async function StepPayment({ searchParams }: { searchParams?: Pro
 			<div className="card">
 				<FormHeader
 					rightTitle="Payment"
-					rightSubtitle={<><strong>Status:</strong> {statusLabel}</>}
+					rightSubtitle={<>{formattedServiceType}</>}
 					rightMeta={[
 						{ label: "Invoice #", value: invoiceNumber },
 						{ label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },

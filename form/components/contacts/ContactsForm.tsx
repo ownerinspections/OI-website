@@ -11,6 +11,7 @@ import { ContactFormSkeleton } from "@/components/ui/SkeletonLoader";
 import type { ActionResult } from "@/lib/actions/contacts/createContact";
 import { submitContact } from "@/lib/actions/contacts/createContact";
 import type { ServiceRecord } from "@/lib/actions/services/getService";
+import { getServiceType, getStepUrl } from "@/lib/config/service-routing";
 
 type Props = {
 	services: ServiceRecord[];
@@ -62,8 +63,21 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 
 	useEffect(() => {
 		if (state?.success && state?.contactId && state?.dealId) {
+			// Get service ID from the selected service
+			const selectedServiceId = serviceId ? Number(serviceId) : null;
+			
+			console.log('[ContactsForm] Redirecting with service ID:', selectedServiceId);
+			
+			// Use service routing to determine the correct property step URL
+			let propertyStepUrl = "/steps/02-property"; // fallback
+			if (selectedServiceId) {
+				const serviceType = getServiceType(selectedServiceId);
+				propertyStepUrl = getStepUrl(2, serviceType);
+				console.log('[ContactsForm] Service routing:', { selectedServiceId, serviceType, propertyStepUrl });
+			}
+			
 			// Use window.location for immediate navigation to avoid SSR issues
-			const url = new URL(`/steps/02-property`, window.location.origin);
+			const url = new URL(propertyStepUrl, window.location.origin);
 			// Required order: userId, contactId, dealId, propertyId, quoteId
 			const currentUrl = new URL(window.location.href);
 			const currentUserId = currentUrl.searchParams.get("userId");
@@ -76,11 +90,13 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 			const quoteId = currentUrl.searchParams.get("quoteId");
 			if (quoteId) url.searchParams.set("quoteId", quoteId);
 			
+			console.log('[ContactsForm] Final redirect URL:', url.toString());
+			
 			// Use window.location.assign for immediate navigation instead of router.replace
 			// This ensures the navigation happens immediately and avoids SSR hydration issues
 			window.location.assign(url.toString());
 		}
-	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId]);
+	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId, serviceId]);
 
 	const formStyle: React.CSSProperties = {
 		display: "grid",

@@ -9,7 +9,6 @@ import FormHeader from "@/components/ui/FormHeader";
 import { getReceiptNote } from "@/lib/actions/globals/getGlobal";
 import NoteBox from "@/components/ui/messages/NoteBox";
 import { redirect } from "next/navigation";
-import ReceiptFormWrapper from "@/components/ui/ReceiptFormWrapper";
 
 // Utility function to format Australian phone numbers (same as step 5)
 function formatAustralianPhone(phone: string): string {
@@ -448,6 +447,32 @@ export default async function PreSalesReceiptStep({ searchParams }: { searchPara
 
     const receiptNote = await getReceiptNote();
 
+    // Get service type from deal
+    let serviceType: string = "Service";
+    let formattedServiceType: string = "Service";
+    try {
+        if (dealId) {
+            const dealRes = await getRequest<{ data: { service?: number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service`);
+            const serviceId = (dealRes as any)?.data?.service || null;
+            
+            if (serviceId) {
+                const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(serviceId))}?fields=service_name,service_type`);
+                const service = (serviceRes as any)?.data || {};
+                serviceType = service.service_name || service.service_type || serviceType;
+                
+                // Format service type for display
+                formattedServiceType = serviceType
+                    .replace(/_/g, ' ')
+                    .replace(/-/g, ' ')
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                    .join(' ');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch service type:', error);
+    }
+
     return (
         <ReceiptPageClient
             invoiceId={String(invoice?.id)}
@@ -456,12 +481,13 @@ export default async function PreSalesReceiptStep({ searchParams }: { searchPara
             contactId={contactId}
             dealId={dealId}
             quoteId={quoteId}
+            serviceType={serviceType}
         >
             <div className="container">
                 <div className="card">
                     <FormHeader
                         rightTitle="Receipt"
-                        rightSubtitle="Pre-Sales Inspection"
+                        rightSubtitle={<>{formattedServiceType}</>}
                         rightMeta={[
                             { label: "Invoice #", value: (invoice as any)?.invoice_id },
                             { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },

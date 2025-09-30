@@ -1,3 +1,70 @@
+// Environment validation utility
+function validateEnvironment(): void {
+	const errors: string[] = [];
+	const warnings: string[] = [];
+
+	// Critical environment variables that must be set
+	const criticalVars = {
+		KONG_GATEWAY_URL: "Kong API Gateway URL for backend communication",
+		STRIPE_SECRET_KEY: "Stripe secret key for payment processing",
+		VERIFY_SERVICE_SID: "Twilio Verify Service SID for phone verification",
+	};
+
+	// Important environment variables that should be set in production
+	const importantVars = {
+		APP_BASE_URL: "Base URL of the application (for production)",
+		CLIENT_ROLE_ID: "Default role ID for new users",
+	};
+
+	// Check critical variables
+	for (const [key, description] of Object.entries(criticalVars)) {
+		const value = process.env[key];
+		if (!value || value.trim() === "") {
+			errors.push(`Missing critical environment variable: ${key} (${description})`);
+		}
+	}
+
+	// Check important variables (warnings only)
+	for (const [key, description] of Object.entries(importantVars)) {
+		const value = process.env[key];
+		if (!value || value.trim() === "") {
+			warnings.push(`Missing important environment variable: ${key} (${description})`);
+		}
+	}
+
+	// Log warnings
+	if (warnings.length > 0) {
+		console.warn("[ENV] Environment validation warnings:");
+		warnings.forEach(warning => console.warn(`  - ${warning}`));
+	}
+
+	// Throw errors for critical missing variables
+	if (errors.length > 0) {
+		console.error("[ENV] Environment validation failed:");
+		errors.forEach(error => console.error(`  - ${error}`));
+		throw new Error(`Environment validation failed. Missing ${errors.length} critical variable(s). Check your .env file.`);
+	}
+
+	// Success message
+	if (process.env.NODE_ENV !== "test") {
+		console.log("[ENV] Environment validation passed ✓");
+	}
+}
+
+// Validate environment on module load (only in non-test environments)
+if (process.env.NODE_ENV !== "test" && typeof window === "undefined") {
+	try {
+		validateEnvironment();
+	} catch (error) {
+		// In development, show warning but don't crash
+		if (process.env.NODE_ENV === "development") {
+			console.warn("[ENV] Development mode: Continuing despite validation errors");
+		} else {
+			throw error;
+		}
+	}
+}
+
 export const KONG_GATEWAY_URL = process.env.KONG_GATEWAY_URL ?? "http://localhost:8000";
 export const DEAL_OWNER_ID = process.env.DEAL_OWNER_ID ?? "";
 export const DEAL_STAGE_NEW_ID = process.env.DEAL_STAGE_NEW_ID ?? "";
@@ -27,25 +94,21 @@ export const PHONE_VERIFIED_REDIRECT_SECONDS = Number(process.env.PHONE_VERIFIED
 export const APP_BASE_URL = process.env.APP_BASE_URL ?? "";
 // Invoice defaults
 export const INVOICE_DUE_DAYS = Number(process.env.INVOICE_DUE_DAYS ?? "7");
-export const INVOICE_NUMBER_PREFIX = process.env.INVOICE_NUMBER_PREFIX ?? "OI-";
 export const INVOICE_STATUS = process.env.INVOICE_STATUS ?? "submitted";
-export const QUOTE_NUMBER_PREFIX = process.env.QUOTE_NUMBER_PREFIX ?? "Q-";
 // Stripe
 export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 export const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY ?? "";
 export const DIRECTUS_APP_URL = process.env.DIRECTUS_APP_URL ?? "http://localhost:3000";
-// Cookie domain for auth cookies (e.g., .example.com). Leave empty to omit domain attribute.
-export const FORM_COOKIE_DOMAIN = process.env.FORM_COOKIE_DOMAIN ?? "";
 // Redis (removed)
 // Dashboard app base URL (Next.js app). Used for redirects like "Book Now".
 export const APP_DASHBOARD_URL = process.env.APP_DASHBOARD_URL ?? "http://localhost:8040";
-// Website URLs for navigation
-export const HOME_WEBSITE_URL = process.env.HOME_WEBSITE_URL ?? "https://ownerinspections.com.au";
-export const FORM_WEBSITE_URL = process.env.FORM_WEBSITE_URL ?? "https://form.owner-inspections.com.au";
 
 // Payment failure reasons (static defaults)
 export const FAILED_REASON_REQUIRES_CONFIRMATION = process.env.FAILED_REASON_REQUIRES_CONFIRMATION ?? "Payment method attached, needs confirmation";
 export const FAILED_REASON_REQUIRES_ACTION = process.env.FAILED_REASON_REQUIRES_ACTION ?? "Customer must authenticate (3DS, OTP)";
 export const FAILED_REASON_PROCESSING = process.env.FAILED_REASON_PROCESSING ?? "Bank processing, waiting on result";
 export const FAILED_REASON_REQUIRES_CAPTURE = process.env.FAILED_REASON_REQUIRES_CAPTURE ?? "PaymentIntent canceled";
+
+// Export validation function for manual validation if needed
+export { validateEnvironment };

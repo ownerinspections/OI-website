@@ -23,7 +23,7 @@ services:
       CACHE_AUTO_PURGE: "true"
       CACHE_STORE: "redis"
       # Use Docker network name for in-cluster connection; do not use host loopback
-      REDIS: "redis://:${REDIS_AUTH}@redis:6379"
+      REDIS: "redis://:HnehwkHk21ikJHFJL@redis:6379"
       ADMIN_EMAIL: "mehdiitaleghanii@gmail.com"
       ADMIN_PASSWORD: "123456"
       PUBLIC_URL: "http://localhost:8055"
@@ -60,11 +60,11 @@ services:
     image: redis:7
     restart: always
     command: >
-      --requirepass ${REDIS_AUTH}
+      --requirepass HnehwkHk21ikJHFJL
     ports:
-      - "${REDIS_PORT}:6379"
+      - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "HnehwkHk21ikJHFJL", "ping"]
       interval: 3s
       timeout: 10s
       retries: 10
@@ -82,6 +82,13 @@ services:
       POSTGRES_PASSWORD: kong
     volumes:
       - kong-data-owner:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
     networks:
       - strapi
 
@@ -103,10 +110,11 @@ services:
 
   kong:
     container_name: kong
-    image: kong:3.6
+    image: kong:3.9
     restart: unless-stopped
     depends_on:
-      - kong-database
+      kong-database:
+        condition: service_healthy
     environment:
       KONG_DATABASE: postgres
       KONG_PG_HOST: kong-database
@@ -135,7 +143,7 @@ services:
       - strapi
 
   rate-engine:
-    image: rate-engine:latest
+    image: australia-southeast1-docker.pkg.dev/psychic-apex-466712-v5/oiregistery/rate-engine:latest
     container_name: rate-engine
     environment:
       KONG_GATEWAY_URL: "http://kong:8000"
@@ -147,8 +155,6 @@ services:
       - strapi
 
 volumes:
-  strapi-data-owner:
-  strapi-uploads:
   kong-data-owner:
   directus-data-owner:
   directus-extensions-owner:

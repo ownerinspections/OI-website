@@ -59,11 +59,6 @@ export default function DilapidationPropertiesForm({
 		}
 	}, [state?.success, state?.nextUrl]);
 
-	// Show skeleton loading while form is being submitted or after success (until redirect to step 4)
-	if (submitted || state?.success) {
-		return <QuoteFormSkeleton />;
-	}
-
 	// Use same styling as PropertiesForm
 	const cardStyle: React.CSSProperties = { padding: 16 };
 	const gridStyle: React.CSSProperties = { display: "grid", gap: 6 };
@@ -114,6 +109,11 @@ export default function DilapidationPropertiesForm({
 
 	// Check if any property is currently extracting
 	const isAnyExtracting = extractionStates.some(Boolean);
+
+	// Show skeleton loading while form is being submitted or after success (until redirect to step 4)
+	if (submitted || state?.success) {
+		return <QuoteFormSkeleton />;
+	}
 
 	return (
 		<div style={cardStyle}>

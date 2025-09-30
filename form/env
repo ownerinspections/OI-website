@@ -1,0 +1,67 @@
+# ==========================
+# Form Application Environment Variables
+# ==========================
+
+# Kong API Gateway Configuration
+KONG_GATEWAY_URL=http://localhost:8000
+
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_51NTDlZByWX5SYeSd27YLiMZVSdMojg2AXITPt46XPZ9Jq4wfdO1EBhuCWlQx7Tr9nePOjM6vZb8h5b1yzGL4uahF00LWAbUypN
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+STRIPE_PUBLISHABLE_KEY=pk_test_51NTDlZByWX5SYeSdgxNK7jKxPUtDduKXX202HuYBLTEuhjdxVo4aIeWHeV87XJdLKBiHsCAxpm9eqfpu2xx0iWGE000sct16aB
+# Important Environment Variables (Recommended for Production)
+APP_BASE_URL=http://localhost:8030
+CLIENT_ROLE_ID=edc2e863-e2c4-4ee3-bcbd-d090df2911e1
+
+# Deal Configuration
+DEAL_OWNER_ID=2b68c99b-1127-4ee6-aa4a-8c383361bd60
+DEAL_STAGE_NEW_ID=3a666413-ba6d-48e4-8f56-b60d91b731ef
+DEAL_STAGE_CLOSED_WON_ID=8b7f5dbc-b1a1-4746-9f10-e56bd18d0cf1
+DEAL_STAGE_QUOTE_SUBMITTED_ID=9baaf7dc-5de5-4c6e-82ea-b60a648d4932
+DEAL_STAGE_INVOICE_SUBMITTED_ID=06bc24a7-3bbf-4fac-af4a-2ee88efcc1d0
+DEAL_STAGE_PAYMENT_SUBMITTED_ID=02a602c5-7b1f-4fd6-ac83-25160734d308
+DEAL_STAGE_PAYMENT_FAILURE_ID=4bbf6114-7586-40e0-a175-fa8fa5037d15
+DEAL_NAME=Inspection Deal
+
+# Google Places API Configuration
+GOOGLE_AUTOCOMPLETE_PATH=/maps/api/place/autocomplete/json
+
+# OpenAI Configuration
+OPENAI_MODEL=gpt-4.1
+OPENAI_ENABLE_WEBSEARCH=true
+
+# Twilio Verification Configuration
+VERIFY_SANDBOX_ENABLED=true
+VERIFY_SANDBOX_CODE=123456
+VERIFY_SERVICE_SID=AC18a98df495d807de599da357c22a44f9
+
+# Proposal Configuration
+PROPOSAL_NAME=New Proposal
+PROPOSAL_STATUS=submitted
+PROPOSAL_EXPIRY_DAYS=7
+
+# Phone Verification Configuration
+PHONE_VERIFIED_REDIRECT_SECONDS=3
+
+# Invoice Configuration
+INVOICE_DUE_DAYS=7
+INVOICE_STATUS=submitted
+
+
+# Directus Configuration
+DIRECTUS_APP_URL=http://localhost:8055
+
+# Cookie Configuration
+
+# Application URLs
+APP_DASHBOARD_URL=http://localhost:8040
+
+# Payment Failure Reasons
+FAILED_REASON_REQUIRES_CONFIRMATION=Payment method attached, needs confirmation
+FAILED_REASON_REQUIRES_ACTION=Customer must authenticate (3DS, OTP)
+FAILED_REASON_PROCESSING=Bank processing, waiting on result
+FAILED_REASON_REQUIRES_CAPTURE=PaymentIntent canceled
+
+# Development Configuration
+DEBUG_HTTP=false
+NODE_ENV=development

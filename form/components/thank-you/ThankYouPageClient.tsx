@@ -105,7 +105,7 @@ export default function ThankYouPageClient({
     return (
         <div className="container">
             <div className="card">
-                <FormHeaderClient rightTitle="Thank you" rightMeta={headerMeta as any} company={company} />
+                <FormHeaderClient rightTitle="Thank you" rightMeta={headerMeta as any} />
                 {thankYouNote ? (
                     <NoteBox style={{ marginBottom: 16 }}>
                         {thankYouNote}

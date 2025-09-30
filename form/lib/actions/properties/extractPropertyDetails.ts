@@ -4,6 +4,14 @@ import { OPENAI_MODEL, OPENAI_ENABLE_WEBSEARCH } from "@/lib/env";
 import fs from "fs/promises";
 import path from "path";
 
+// Import buildUrl function for consistent URL generation
+function buildUrl(path: string): string {
+	if (path.startsWith("http://") || path.startsWith("https://")) return path;
+	const base = process.env.KONG_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+	const suffix = path.startsWith("/") ? path : `/${path}`;
+	return `${base}${suffix}`;
+}
+
 export type QuotingInfo = {
   property_classification: "Residential" | "Commercial" | "N/A" | string;
   property_type: "House" | "Townhouse" | "Apartment/Unit" | "Villa" | "Duplex" | "Other" | "N/A" | string;
@@ -137,8 +145,7 @@ export async function extractPropertyDetails(input: { address: string }): Promis
 
   try {
     const start = Date.now();
-    const urlBase = process.env.KONG_GATEWAY_URL ?? "http://localhost:8000";
-    const url = `${urlBase.replace(/\/$/, "")}/openai/v1/responses`;
+    const url = buildUrl("/openai/v1/responses");
     console.log("[extractPropertyDetails] POST", url, "model=", payload.model, "tools=", !!(payload as any).tools);
     const res = await fetch(url, {
       method: "POST",

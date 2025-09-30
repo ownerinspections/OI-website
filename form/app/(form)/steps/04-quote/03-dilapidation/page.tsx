@@ -504,7 +504,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			<div className="card">
 				<FormHeader
 					rightTitle="Quote"
-					rightSubtitle={statusLabel ? (<><strong>Status:</strong> {statusLabel}</>) : undefined}
+					rightSubtitle={serviceLabel || "Dilapidation Inspection"}
 					rightMeta={[
 						{ label: "Quote #", value: (viewModel as any)?.quote_id || (viewModel as any)?.id },
 						{ label: "Issue Date", value: issueDateFmt },

@@ -188,8 +188,8 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
 
     const headerMeta = [
         { label: "Booking #", value: booking?.booking_id || booking?.id },
-        { label: "Status", value: booking?.status || "—" },
         { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
+        { label: "Status", value: booking?.status || "—" },
     ];
 
     const bookingNote = await getBookingNote();
@@ -212,12 +212,6 @@ export default async function StepBooking({ searchParams }: { searchParams?: Pro
                 ) : null}
 
                 <div style={{ display: "grid", gap: 16 }}>
-                    {/* Inspection type */}
-                    <div style={{ textAlign: "center", marginBottom: 8 }}>
-                        <div style={{ color: "var(--color-text-primary)", fontSize: 18, fontWeight: 700 }}>{serviceName || "Dilapidation Inspection"}</div>
-                    </div>
-                    
-
                     {/* Properties block: read-only with details if present */}
                     <div>
                         <div style={{ fontWeight: 600, marginBottom: 8 }}>

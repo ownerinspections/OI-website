@@ -23,6 +23,7 @@ pnpm-debug.log*
 .pnpm-debug.log*
 
 # Env files (root and subfolders)
+.oissh
 .env
 .env.local
 .env.*.local

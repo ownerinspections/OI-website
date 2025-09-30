@@ -43,7 +43,6 @@ function formatAustralianPhone(phone: string): string {
 
 export default async function DilapidationReceiptStep({ searchParams }: { searchParams?: Promise<Record<string, string | string[]>> }) {
     const params = (await searchParams) ?? {};
-    const params = (await searchParams) ?? {};
     const invoiceId = typeof params.invoiceId === "string" ? params.invoiceId : undefined;
     const sessionId = typeof params.session_id === "string" ? params.session_id : undefined;
     const paymentIntentIdParam = typeof params.payment_intent === "string" ? params.payment_intent : undefined;
@@ -448,6 +447,32 @@ export default async function DilapidationReceiptStep({ searchParams }: { search
 
     const receiptNote = await getReceiptNote();
 
+    // Get service type from deal
+    let serviceType: string = "Service";
+    let formattedServiceType: string = "Service";
+    try {
+        if (dealId) {
+            const dealRes = await getRequest<{ data: { service?: number } }>(`/items/os_deals/${encodeURIComponent(String(dealId))}?fields=service`);
+            const serviceId = (dealRes as any)?.data?.service || null;
+            
+            if (serviceId) {
+                const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(serviceId))}?fields=service_name,service_type`);
+                const service = (serviceRes as any)?.data || {};
+                serviceType = service.service_name || service.service_type || serviceType;
+                
+                // Format service type for display
+                formattedServiceType = serviceType
+                    .replace(/_/g, ' ')
+                    .replace(/-/g, ' ')
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                    .join(' ');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch service type:', error);
+    }
+
     return (
         <ReceiptPageClient
             invoiceId={String(invoice?.id)}
@@ -456,12 +481,13 @@ export default async function DilapidationReceiptStep({ searchParams }: { search
             contactId={contactId}
             dealId={dealId}
             quoteId={quoteId}
+            serviceType={serviceType}
         >
         <div className="container">
             <div className="card">
                 <FormHeader
                     rightTitle="Receipt"
-                    rightSubtitle="Dilapidation Inspection"
+                    rightSubtitle={<>{formattedServiceType}</>}
                     rightMeta={[
                         { label: "Invoice #", value: (invoice as any)?.invoice_id },
                         { label: "Date", value: new Intl.DateTimeFormat("en-AU", { dateStyle: "medium" }).format(new Date()) },
@@ -556,6 +582,7 @@ export default async function DilapidationReceiptStep({ searchParams }: { search
                     {/* Status row removed from totals */}
                 </div>
             </div>
+        </div>
         </ReceiptPageClient>
     );
 }

@@ -16,6 +16,7 @@ build
 .env.development.local
 .env.test.local
 .env.production.local
+.en.local
 
 # Testing
 coverage
@@ -99,3 +100,6 @@ docs/
 
 # Vercel
 .vercel
+
+# Development files
+*.backup

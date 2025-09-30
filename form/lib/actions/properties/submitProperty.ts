@@ -5,6 +5,14 @@ import { updateProperty } from "@/lib/actions/properties/updateProperty";
 import { createAgentContactsForDeal } from "@/lib/actions/contacts/createAgentContacts";
 import { VALIDATION_MESSAGES, VALIDATION_PATTERNS, VALIDATION_LIMITS } from "@/lib/validation/constants";
 import { APP_BASE_URL } from "@/lib/env";
+import { getUser } from "@/lib/actions/users/getUser";
+import { getContact } from "@/lib/actions/contacts/getContact";
+import { getDeal } from "@/lib/actions/deals/getDeal";
+import { getServiceById } from "@/lib/actions/services/getService";
+import { createProposal } from "@/lib/actions/quotes/createQuote";
+import { getRequest, postRequest } from "@/lib/http/fetcher";
+import { getStepUrl, getRouteTypeFromServiceType } from "@/lib/config/service-routing";
+import { getProperty } from "@/lib/actions/properties/getProperty";
 
 export type SubmitResult = {
 	success?: boolean;
@@ -273,15 +281,147 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			}
 		}
 
+		// Check phone verification status to determine next step
+		let isPhoneVerified = false;
+		let phone: string | undefined = undefined;
+		let status: string | undefined = undefined;
+
+		// Prefer user phone/status if available
+		if (user_id) {
+			try {
+				const user = await getUser(String(user_id));
+				if (user) {
+					phone = (user as any)?.phone ?? phone;
+					status = (user as any)?.status ?? status;
+				}
+			} catch {
+				// ignore
+			}
+		}
+
+		// Fallback: fetch contact details for phone and status
+		if ((!phone || !status) && contact_id) {
+			try {
+				const res = await getContact(contact_id);
+				const contact = (res as any)?.data as { phone?: string; status?: string } | null;
+				phone = phone || (contact?.phone ?? undefined);
+				status = status || ((contact as any)?.status ?? undefined);
+			} catch {
+				// ignore
+			}
+		}
+
+		// Check if phone is verified
+		isPhoneVerified = status === "active" || status === "published";
+
 		// Generate proper SSR-compliant URL using APP_BASE_URL
 		const baseUrl = APP_BASE_URL || (process?.env?.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-		const next = new URL("/steps/03-phone-verification", baseUrl);
-		if (user_id) next.searchParams.set("userId", user_id);
-		if (contact_id) next.searchParams.set("contactId", contact_id);
-		if (deal_id) next.searchParams.set("dealId", deal_id);
-		if (resultingPropertyId) next.searchParams.set("propertyId", String(resultingPropertyId));
-		console.log("[submitProperty] Success - redirecting to:", `${next.pathname}${next.search}`);
-		return { success: true, nextUrl: `${next.pathname}${next.search}` };
+		
+		let nextStepUrl: string;
+		if (isPhoneVerified) {
+			// Skip phone verification and go directly to step 4 (quote)
+			console.log("[submitProperty] Phone already verified, skipping step 3 and going to step 4");
+			
+			// Determine the service-specific quote page to redirect to
+			let quoteUrl = "/steps/04-quote"; // fallback to generic quote page
+			try {
+				const deal = await getDeal(deal_id);
+				if (deal?.service) {
+					const service = await getServiceById(deal.service);
+					if (service?.service_type) {
+						const routeType = getRouteTypeFromServiceType(service.service_type);
+						if (routeType !== "generic") {
+							quoteUrl = getStepUrl(4, routeType);
+						}
+					}
+				}
+			} catch (e) {
+				console.warn("[submitProperty] Failed to determine service-specific quote page, using generic", e);
+			}
+
+			// Ensure a proposal exists for verified users
+			let quoteId: string | number | undefined = undefined;
+			try {
+				// Try latest proposal for this deal
+				const encodedDeal = encodeURIComponent(String(deal_id));
+				const res = await getRequest<{ data: any[] }>(`/items/os_proposals?filter%5Bdeal%5D%5B_eq%5D=${encodedDeal}&sort=-date_created&limit=1`);
+				const latest = Array.isArray((res as any)?.data) && (res as any).data.length > 0 ? (res as any).data[0] : null;
+				quoteId = latest?.id ?? undefined;
+				if (!quoteId) {
+					// Create a new proposal based on rate estimate
+					const deal = await getDeal(deal_id);
+					const svcId = deal?.service as any;
+					const service = svcId ? await getServiceById(svcId) : null;
+					const propId = resultingPropertyId || (deal?.property ? String(deal.property) : undefined);
+					let property = null;
+					if (propId) {
+						// Handle multiple property IDs for dilapidation services
+						if (propId.includes(",")) {
+							// For multiple properties, get the first one as representative
+							const firstPropId = propId.split(",")[0].trim();
+							property = await getProperty(firstPropId);
+						} else {
+							property = await getProperty(propId);
+						}
+					}
+					const property_category = (property?.property_category as any) || "residential";
+					const service_code = service ? (service.service_type || service.service_name || "").toString() : "";
+					let amount = 0;
+					let note: string | undefined = undefined;
+					if (service_code) {
+						const payload = {
+							service: service_code,
+							property_category,
+							bedrooms: (property as any)?.number_of_bedrooms || 0,
+							bathrooms: (property as any)?.number_of_bathrooms || 0,
+							levels: (property as any)?.number_of_levels || 0,
+							basement: Boolean((property as any)?.basement),
+						};
+						try {
+							const estimate = await postRequest<{ stage_prices: any; quote_price: number; note?: string }>("/api/v1/quotes/estimate", payload);
+							amount = estimate?.quote_price ?? 0;
+							note = estimate?.note || undefined;
+						} catch {}
+					}
+					const created = await createProposal({ dealId: deal_id, contactId: contact_id, propertyId: resultingPropertyId, amount, note, userId: user_id });
+					quoteId = created?.id;
+				}
+			} catch {
+				// ignore and continue without quoteId
+			}
+
+			const next = new URL(quoteUrl, baseUrl);
+			if (user_id) next.searchParams.set("userId", user_id);
+			if (contact_id) next.searchParams.set("contactId", contact_id);
+			if (deal_id) next.searchParams.set("dealId", deal_id);
+			if (resultingPropertyId) next.searchParams.set("propertyId", String(resultingPropertyId));
+			if (quoteId) next.searchParams.set("quoteId", String(quoteId));
+			// Add service type information
+			try {
+				const deal = await getDeal(deal_id);
+				if (deal?.service) {
+					const service = await getServiceById(deal.service);
+					if (service?.service_type) {
+						next.searchParams.set("serviceType", service.service_type);
+					}
+				}
+			} catch (e) {
+				// ignore service type if we can't fetch it
+			}
+			nextStepUrl = `${next.pathname}${next.search}`;
+		} else {
+			// Phone not verified, go to step 3 (phone verification)
+			console.log("[submitProperty] Phone not verified, going to step 3");
+			const next = new URL("/steps/03-phone-verification", baseUrl);
+			if (user_id) next.searchParams.set("userId", user_id);
+			if (contact_id) next.searchParams.set("contactId", contact_id);
+			if (deal_id) next.searchParams.set("dealId", deal_id);
+			if (resultingPropertyId) next.searchParams.set("propertyId", String(resultingPropertyId));
+			nextStepUrl = `${next.pathname}${next.search}`;
+		}
+
+		console.log("[submitProperty] Success - redirecting to:", nextStepUrl);
+		return { success: true, nextUrl: nextStepUrl };
 	} catch (_e) {
 		return { success: false, message: "Failed to save property" };
 	}

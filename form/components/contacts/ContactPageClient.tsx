@@ -72,7 +72,7 @@ export default function ContactPageClient({
 
 	return (
 		<>
-			<FormHeaderClient rightTitle="Contact details" company={company} />
+			<FormHeaderClient rightTitle="Contact details" />
 			{contactNote && (
 				<NoteBox style={{ marginBottom: 16 }}>
 					{contactNote}

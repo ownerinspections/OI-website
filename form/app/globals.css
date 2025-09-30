@@ -164,7 +164,7 @@ input, select, textarea {
 
 /* Form header */
 .form-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 0 12px; border-bottom: 1px solid var(--color-light-gray); margin-bottom: 16px; }
-.form-header-left { display: flex; align-items: flex-start; min-width: 0; }
+.form-header-left { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; align-self: flex-start; margin-top: 0; }
 .form-header-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .form-header-logo { width: 200px; height: 56px; position: relative; overflow: hidden; border-radius: 0; background: transparent; border: none; }
 .form-header-company { min-width: 0; }
@@ -172,9 +172,9 @@ input, select, textarea {
 .form-header-contacts { display: grid; gap: 4px; }
 .contact-row { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 12px; }
 .form-header-right { text-align: left; }
-.form-header-right-title { font-weight: 700; color: var(--color-primary); font-size: 24px; line-height: 1.25; }
-.form-header-right-subtitle { color: var(--color-text-secondary); font-size: 12px; margin-top: 2px; }
-.form-header-right-meta { display: grid; gap: 6px; margin-top: 8px; justify-items: start; }
+.form-header-right-title { font-weight: 700; color: var(--color-primary); font-size: 18px; line-height: 1.25; }
+.form-header-right-subtitle { color: var(--color-text-secondary); font-size: 14px; margin-top: 2px; font-weight: 600; }
+.form-header-right-meta { display: grid; gap: 6px; margin-top: 0; justify-items: start; text-align: left; align-self: flex-start; align-items: flex-start; }
 .form-header-meta-item { display: inline-flex; gap: 6px; align-items: baseline; color: var(--color-text-secondary); font-size: 12px; }
 .form-header-meta-item .label { color: var(--color-charcoal); font-weight: 600; }
 .form-header-meta-item .value { color: var(--color-text-secondary); font-weight: 400; }
@@ -214,12 +214,13 @@ input, select, textarea {
 		width: 100%; 
 	}
 	.form-header-right-title { 
-		font-size: 20px; 
+		font-size: 16px; 
 		margin-bottom: 4px; 
 	}
 	.form-header-right-meta { 
 		justify-items: center; 
 		margin-top: 6px; 
+		text-align: center;
 	}
 }
 

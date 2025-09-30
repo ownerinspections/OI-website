@@ -183,7 +183,7 @@ services:
       STRIPE_PUBLISHABLE_KEY: "pk_test_51NTDlZByWX5SYeSdgxNK7jKxPUtDduKXX202HuYBLTEuhjdxVo4aIeWHeV87XJdLKBiHsCAxpm9eqfpu2xx0iWGE000sct16aB"
       
       # Important Environment Variables (Recommended for Production)
-      APP_BASE_URL: "http://localhost:8030"
+      APP_BASE_URL: "https://form.owner-inspections.com.au"
       CLIENT_ROLE_ID: "edc2e863-e2c4-4ee3-bcbd-d090df2911e1"
       
       # Deal Configuration

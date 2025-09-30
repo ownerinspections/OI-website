@@ -58,6 +58,38 @@ check_container() {
     return 0
 }
 
+# Stop related services to ensure clean restore
+stop_related_services() {
+    local container_name=$1
+    
+    case "$container_name" in
+        "directus-database")
+            log "Stopping Directus service to ensure clean restore..."
+            docker stop directus 2>/dev/null || true
+            ;;
+        "kong-database")
+            log "Stopping Kong service to ensure clean restore..."
+            docker stop kong 2>/dev/null || true
+            ;;
+    esac
+}
+
+# Restart related services after restore
+restart_related_services() {
+    local container_name=$1
+    
+    case "$container_name" in
+        "directus-database")
+            log "Restarting Directus service..."
+            docker start directus 2>/dev/null || true
+            ;;
+        "kong-database")
+            log "Restarting Kong service..."
+            docker start kong 2>/dev/null || true
+            ;;
+    esac
+}
+
 # List available backups
 list_backups() {
     local container_name=$1
@@ -85,6 +117,9 @@ restore_database() {
         return 1
     fi
     
+    # Stop related services to ensure clean restore
+    stop_related_services "$container_name"
+    
     # Check if backup file exists
     if [ ! -f "$backup_file" ]; then
         error "Backup file not found: $backup_file"
@@ -111,16 +146,31 @@ restore_database() {
         return 0
     fi
     
-    # Drop and recreate database
-    log "Dropping and recreating database..."
-    if ! docker exec "$container_name" psql -U "$db_user" -h localhost -c "DROP DATABASE IF EXISTS $db_name;" 2>/dev/null; then
-        warning "Could not drop database (might not exist)"
-    fi
+    # Check if database exists and handle restoration
+    log "Checking database status..."
     
-    if ! docker exec "$container_name" psql -U "$db_user" -h localhost -c "CREATE DATABASE $db_name;" 2>/dev/null; then
-        error "Failed to create database"
-        [ -f "$temp_file" ] && rm -f "$temp_file"
-        return 1
+    # Check if database exists
+    if docker exec "$container_name" psql -U "$db_user" -h localhost -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
+        log "Database $db_name exists, clearing existing data..."
+        
+        # Terminate active connections to the database
+        log "Terminating active connections..."
+        docker exec "$container_name" psql -U "$db_user" -h localhost -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$db_name' AND pid <> pg_backend_pid();" 2>/dev/null || true
+        
+        # Clear the database schema and data
+        log "Clearing database schema and data..."
+        if ! docker exec "$container_name" psql -U "$db_user" -h localhost -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO $db_user; GRANT ALL ON SCHEMA public TO public;" 2>/dev/null; then
+            error "Failed to clear database"
+            [ -f "$temp_file" ] && rm -f "$temp_file"
+            return 1
+        fi
+    else
+        log "Database $db_name does not exist, creating it..."
+        if ! docker exec "$container_name" psql -U "$db_user" -h localhost -c "CREATE DATABASE $db_name;" 2>/dev/null; then
+            error "Failed to create database"
+            [ -f "$temp_file" ] && rm -f "$temp_file"
+            return 1
+        fi
     fi
     
     # Restore the database
@@ -131,10 +181,17 @@ restore_database() {
         # Clean up temp file if it exists
         [ -f "$temp_file" ] && rm -f "$temp_file"
         
+        # Restart related services
+        restart_related_services "$container_name"
+        
         return 0
     else
         error "Failed to restore database"
         [ -f "$temp_file" ] && rm -f "$temp_file"
+        
+        # Restart related services even if restore failed
+        restart_related_services "$container_name"
+        
         return 1
     fi
 }

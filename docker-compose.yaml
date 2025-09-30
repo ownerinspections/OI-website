@@ -235,6 +235,10 @@ services:
       # Development Configuration
       DEBUG_HTTP: "false"
       NODE_ENV: "development"
+      
+      # Next.js proxy trust configuration
+      NEXTAUTH_URL: "https://form.owner-inspections.com.au"
+      NEXTAUTH_TRUST_HOST: "true"
     networks:
       - ownerinspections-network
 

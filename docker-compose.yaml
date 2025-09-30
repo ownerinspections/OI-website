@@ -146,7 +146,6 @@ services:
     build:
       context: ./rate_engine
       dockerfile: Dockerfile
-    image: rate-engine:amd64
     container_name: rate-engine
     environment:
       KONG_GATEWAY_URL: "http://kong:8000"
@@ -161,7 +160,6 @@ services:
     build:
       context: ./form
       dockerfile: Dockerfile
-    image: form:amd64
     container_name: form
     restart: unless-stopped
     ports:

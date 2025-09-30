@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-BACKUP_DIR="/Users/mehdi/ownerinspection/ownerinspections.com.au/backups"
+BACKUP_DIR="/home/mehdi/OI-website/backups"
 DATE=$(date +"%Y%m%d_%H%M%S")
 RETENTION_DAYS=30
 

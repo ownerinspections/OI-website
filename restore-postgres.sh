@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-BACKUP_DIR="/Users/mehdi/ownerinspection/ownerinspections.com.au/backups"
+BACKUP_DIR="/home/mehdi/OI-website/backups"
 
 # Colors for output
 RED='\033[0;31m'

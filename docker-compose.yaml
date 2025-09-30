@@ -145,6 +145,7 @@ services:
   rate-engine:
     image: australia-southeast1-docker.pkg.dev/psychic-apex-466712-v5/oiregistery/rate-engine:latest
     container_name: rate-engine
+    platform: linux/amd64
     environment:
       KONG_GATEWAY_URL: "http://kong:8000"
     ports:
@@ -157,6 +158,7 @@ services:
   form:
     image: australia-southeast1-docker.pkg.dev/psychic-apex-466712-v5/oiregistery/ownerinspections-form:30-9-2025
     container_name: form
+    platform: linux/amd64
     restart: unless-stopped
     ports:
       - "8030:8030"
@@ -252,4 +254,3 @@ networks:
   ownerinspections-network:
     name: ownerinspections-network
     driver: bridge
-

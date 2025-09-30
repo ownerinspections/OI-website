@@ -160,6 +160,12 @@ services:
     build:
       context: ./form
       dockerfile: Dockerfile
+      args:
+        KONG_GATEWAY_URL: "http://kong:8000"
+        STRIPE_SECRET_KEY: "sk_test_51NTDlZByWX5SYeSd27YLiMZVSdMojg2AXITPt46XPZ9Jq4wfdO1EBhuCWlQx7Tr9nePOjM6vZb8h5b1yzGL4uahF00LWAbUypN"
+        VERIFY_SERVICE_SID: "AC18a98df495d807de599da357c22a44f9"
+        APP_BASE_URL: "http://localhost:8030"
+        CLIENT_ROLE_ID: "edc2e863-e2c4-4ee3-bcbd-d090df2911e1"
     container_name: form
     restart: unless-stopped
     ports:

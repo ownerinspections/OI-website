@@ -21,4 +21,4 @@ COPY . .
 
 RUN pnpm run build
 EXPOSE 8030
-CMD ["node", "server.js"]
+CMD ["pnpm", "start"]

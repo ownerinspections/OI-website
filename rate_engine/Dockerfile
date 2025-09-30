@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM --platform=$BUILDPLATFORM python:3.12-bookworm
 
 # Environment settings
 ENV PYTHONDONTWRITEBYTECODE=1 \

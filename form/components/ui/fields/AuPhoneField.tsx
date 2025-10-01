@@ -11,6 +11,7 @@ type AuPhoneFieldProps = {
 	required?: boolean;
 	disabled?: boolean;
 	readOnly?: boolean;
+	onChange?: (value: string) => void;
 };
 
 function validatePhoneField(normalizedValue: string, required?: boolean): string | undefined {
@@ -23,7 +24,7 @@ function validatePhoneField(normalizedValue: string, required?: boolean): string
 	return undefined;
 }
 
-export default function AuPhoneField({ name, label = "Phone", defaultValue, error, required, disabled, readOnly }: AuPhoneFieldProps) {
+export default function AuPhoneField({ name, label = "Phone", defaultValue, error, required, disabled, readOnly, onChange: onChangeCallback }: AuPhoneFieldProps) {
 	const [clientError, setClientError] = useState<string | undefined>();
 	const [hasInteracted, setHasInteracted] = useState(false);
 
@@ -88,7 +89,9 @@ export default function AuPhoneField({ name, label = "Phone", defaultValue, erro
 			const validationError = validatePhoneField(normalized, required);
 			setClientError(validationError);
 		}
-	}, [normalized, required, hasInteracted]);
+		// Notify parent of normalized value changes
+		onChangeCallback?.(normalized);
+	}, [normalized, required, hasInteracted, onChangeCallback]);
 
 	// Show server error if present, but clear it if user has fixed the field
 	// Only show server error if user hasn't interacted or field is still invalid

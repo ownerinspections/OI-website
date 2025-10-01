@@ -35,9 +35,10 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 	const [firstName, setFirstName] = useState<string>(initialValues?.first_name ?? "");
 	const [lastName, setLastName] = useState<string>(initialValues?.last_name ?? "");
 	const [email, setEmail] = useState<string>(initialValues?.email ?? "");
+	const [phone, setPhone] = useState<string>(initialValues?.phone ?? "");
 	const [serviceId, setServiceId] = useState<string>(initialValues?.service_id ?? "");
 	const [submitted, setSubmitted] = useState<boolean>(false);
-	const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+	const [showValidationErrors, setShowValidationErrors] = useState<boolean>(false);
 
 	const filteredServices = useMemo(() => services, [services]);
 
@@ -76,27 +77,27 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 				console.log('[ContactsForm] Service routing:', { selectedServiceId, serviceType, propertyStepUrl });
 			}
 			
-			// Use window.location for immediate navigation to avoid SSR issues
-			const url = new URL(propertyStepUrl, window.location.origin);
-			// Required order: userId, contactId, dealId, propertyId, quoteId
+			// Build query params
+			const params = new URLSearchParams();
 			const currentUrl = new URL(window.location.href);
 			const currentUserId = currentUrl.searchParams.get("userId");
 			// Use userId from state if available, otherwise preserve from current URL
 			const userIdToUse = state?.userId || currentUserId;
-			if (userIdToUse) url.searchParams.set("userId", userIdToUse);
-			url.searchParams.set("contactId", state.contactId);
-			url.searchParams.set("dealId", String(state.dealId));
-			if (propertyId) url.searchParams.set("propertyId", propertyId);
+			if (userIdToUse) params.set("userId", userIdToUse);
+			params.set("contactId", state.contactId);
+			params.set("dealId", String(state.dealId));
+			if (propertyId) params.set("propertyId", propertyId);
 			const quoteId = currentUrl.searchParams.get("quoteId");
-			if (quoteId) url.searchParams.set("quoteId", quoteId);
+			if (quoteId) params.set("quoteId", quoteId);
 			
-			console.log('[ContactsForm] Final redirect URL:', url.toString());
+			// Construct the full path with query string
+			const redirectUrl = `${propertyStepUrl}?${params.toString()}`;
+			console.log('[ContactsForm] Final redirect URL:', redirectUrl);
 			
-			// Use window.location.assign for immediate navigation instead of router.replace
-			// This ensures the navigation happens immediately and avoids SSR hydration issues
-			window.location.assign(url.toString());
+			// Use router.push with just the path and query string (no origin)
+			router.push(redirectUrl);
 		}
-	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId, serviceId]);
+	}, [state?.success, state?.userId, state?.contactId, state?.dealId, propertyId, serviceId, router]);
 
 	const formStyle: React.CSSProperties = {
 		display: "grid",
@@ -114,11 +115,56 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 		justifyContent: "flex-end",
 	};
 
+	// Client-side validation using the same logic as server-side (createContact.ts validate function)
+	const isFormValid = useMemo(() => {
+		if (!firstName?.trim()) return false;
+		if (!lastName?.trim()) return false;
+		if (!email?.trim()) return false;
+		if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) return false;
+		if (!phone?.trim()) return false;
+		// Check if it's in E.164 format (+61...)
+		if (phone.startsWith("+61")) {
+			const phoneDigits = phone.replace(/\D+/g, "");
+			if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) return false;
+		} else {
+			// Check if it's in local format (4xx xxx xxx or partial)
+			const phoneDigits = phone.replace(/\D+/g, "");
+			if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) return false;
+		}
+		if (!serviceId) return false;
+		return true;
+	}, [firstName, lastName, email, phone, serviceId]);
 
-	const serviceIdError = state?.errors?.service_id ?? (submitted && !serviceId ? "Service is required" : undefined);
+	// Validation error messages (only show if validation attempted)
+	const firstNameError = showValidationErrors && !firstName?.trim() ? "First name is required" : state?.errors?.first_name;
+	const lastNameError = showValidationErrors && !lastName?.trim() ? "Last name is required" : state?.errors?.last_name;
+	
+	const emailError = useMemo(() => {
+		if (state?.errors?.email) return state.errors.email;
+		if (!showValidationErrors) return undefined;
+		if (!email?.trim()) return "Email is required";
+		if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) return "Enter a valid email";
+		return undefined;
+	}, [email, showValidationErrors, state?.errors?.email]);
 
-	// Show full page skeleton loading while form is being submitted or after success (until redirect)
-	if (isSubmitting || state?.success) {
+	const phoneError = useMemo(() => {
+		if (state?.errors?.phone) return state.errors.phone;
+		if (!showValidationErrors) return undefined;
+		if (!phone?.trim()) return "Phone is required";
+		if (phone.startsWith("+61")) {
+			const phoneDigits = phone.replace(/\D+/g, "");
+			if (phoneDigits.length !== 11 || !phoneDigits.startsWith("614")) return "Enter a valid Australian mobile number";
+		} else {
+			const phoneDigits = phone.replace(/\D+/g, "");
+			if (phoneDigits.length < 9 || !phoneDigits.startsWith("4")) return "Enter a valid Australian mobile number";
+		}
+		return undefined;
+	}, [phone, showValidationErrors, state?.errors?.phone]);
+
+	const serviceIdError = showValidationErrors && !serviceId ? "Service is required" : state?.errors?.service_id;
+
+	// Show full page skeleton loading after success (until redirect)
+	if (state?.success) {
 		return (
 			<div style={{ 
 				position: "fixed", 
@@ -149,7 +195,6 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 				noValidate 
 				onSubmit={() => {
 					setSubmitted(true);
-					setIsSubmitting(true);
 				}}
 			>
 					<input type="hidden" name="deal_id" value={dealId ?? ""} />
@@ -157,16 +202,16 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 					<input type="hidden" name="property_id" value={propertyId ?? ""} />
 					<input type="hidden" name="user_id" value={userId ?? ""} />
 					<div>
-						<TextField name="first_name" label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={state?.errors?.first_name} required autoComplete="given-name" />
+						<TextField name="first_name" label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={firstNameError} required autoComplete="given-name" />
 					</div>
 					<div>
-						<TextField name="last_name" label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} error={state?.errors?.last_name} required autoComplete="family-name" />
+						<TextField name="last_name" label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} error={lastNameError} required autoComplete="family-name" />
 					</div>
 					<div>
-						<EmailField name="email" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} error={state?.errors?.email} required />
+						<EmailField name="email" label="Email" value={email} onChange={(e) => setEmail(e.target.value)} error={emailError} required />
 					</div>
 					<div>
-						<AuPhoneField name="phone" label="Phone" defaultValue={initialValues?.phone} error={state?.errors?.phone} required />
+						<AuPhoneField name="phone" label="Phone" defaultValue={initialValues?.phone} error={phoneError} required onChange={(value) => setPhone(value)} />
 					</div>
 					<div style={fullWidth}>
 						<AutoFillField
@@ -184,7 +229,17 @@ export default function ContactsForm({ services, dealId, contactId, propertyId, 
 					</div>
 					{/* Address fields removed on step 1 */}
 				<div style={actionsStyle}>
-					<NextButton label={isSubmitting ? "Processing..." : "Next"} disabled={isSubmitting} />
+					<NextButton 
+						label="Next"
+						onClick={(e) => {
+							if (!isFormValid) {
+								e.preventDefault();
+								setShowValidationErrors(true);
+								return;
+							}
+							// If form is valid, let the normal submission proceed
+						}}
+					/>
 				</div>
 			</form>
 		</>

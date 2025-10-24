@@ -1,0 +1,29 @@
+{% layout "base" %}
+
+{% block content %}
+    <h1>Welcome{% if firstname and lastname %} {{ firstname }} {{ lastname }}{% elsif firstname %} {{ firstname }}{% endif %}!</h1>
+    
+    <p>Dear {% if firstname %}{{ firstname }}{% else %}Valued Customer{% endif %},</p>
+    
+    <p>Thank you for joining {{ projectName | default: "Owner Inspections" }}. We're excited to have you on board.</p>
+    
+    <p>Your account has been successfully created and you can now access all our services.</p>
+    
+    <div style="text-align: center;">
+        <a href="{{ projectUrl | default: 'https://ownerinspections.com.au' }}" class="button">Get Started</a>
+    </div>
+    
+    <h2>What's Next?</h2>
+    
+    <p>Here are some things you can do to get started:</p>
+    
+    <ul style="color: #595959; line-height: 1.8;">
+        <li>Complete your profile</li>
+        <li>Explore our services</li>
+        <li>Contact our support team if you have any questions</li>
+    </ul>
+    
+    <p>If you have any questions, feel free to reach out to our support team.</p>
+    
+    <p>Best regards,<br>The {{ projectName | default: "Owner Inspections" }} Team</p>
+{% endblock %}

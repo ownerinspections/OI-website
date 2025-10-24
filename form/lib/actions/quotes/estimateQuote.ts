@@ -99,18 +99,18 @@ export async function estimateApartmentPreSettlementQuote(property: PropertyDeta
 }
 
 /**
- * Construction stages inspection quote estimation
+ * New construction stages inspection quote estimation
  */
 export async function estimateConstructionStagesQuote(property: PropertyDetails): Promise<QuoteEstimateResponse | null> {
 	const payload = {
-		service: "construction_stages",
+		service: "new_construction_stages",
 		property_category: property.property_category,
 		stages: property.stages && property.stages.length > 0 ? property.stages : [1, 2, 3, 4, 5, 6],
 		area_sq: property.area_sq || 0,
 		levels: property.levels || 0
 	};
 	
-	return await callServiceEstimateAPI("construction-stages", payload);
+	return await callServiceEstimateAPI("new-construction-stages", payload);
 }
 
 /**
@@ -168,11 +168,12 @@ export async function estimateQuoteByServiceType(serviceType: string, property: 
 				return await estimatePreSalesQuote(property);
 			case "dilapidation":
 				return await estimateDilapidationQuote(property);
-			case "apartment-pre-settlement":
-				return await estimateApartmentPreSettlementQuote(property);
-			case "construction_stages":
-				return await estimateConstructionStagesQuote(property);
-			case "insurance_report":
+		case "apartment-pre-settlement":
+			return await estimateApartmentPreSettlementQuote(property);
+		case "new_construction_stages":
+		case "construction_stages": // Legacy alias
+			return await estimateConstructionStagesQuote(property);
+		case "insurance_report":
 				return await estimateInsuranceReportQuote(property);
 			case "expert_witness_report":
 				return await estimateExpertWitnessReportQuote(property);

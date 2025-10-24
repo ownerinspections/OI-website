@@ -73,6 +73,7 @@ export const DEAL_STAGE_QUOTE_SUBMITTED_ID = process.env.DEAL_STAGE_QUOTE_SUBMIT
 export const DEAL_STAGE_INVOICE_SUBMITTED_ID = process.env.DEAL_STAGE_INVOICE_SUBMITTED_ID ?? "";
 export const DEAL_STAGE_PAYMENT_SUBMITTED_ID = process.env.DEAL_STAGE_PAYMENT_SUBMITTED_ID ?? "";
 export const DEAL_STAGE_PAYMENT_FAILURE_ID = process.env.DEAL_STAGE_PAYMENT_FAILURE_ID ?? "";
+export const DEAL_STAGE_BOOKED_ID = process.env.DEAL_STAGE_BOOKED_ID ?? "";
 export const DEAL_NAME = process.env.DEAL_NAME ?? "Inspection Deal";
 // Default Directus role id for newly created users
 export const CLIENT_ROLE_ID = process.env.CLIENT_ROLE_ID ?? process.env.DIRECTUS_DEFAULT_ROLE_ID ?? "";

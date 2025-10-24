@@ -1,0 +1,54 @@
+{% extends "base.liquid" %}
+
+{% block content %}
+<h1>Booking Received</h1>
+
+<div class="alert-info">
+    <strong>Thank you for your booking!</strong><br>
+    We have received your inspection booking request.
+</div>
+
+<p>Hi {{ customerName | default: "Valued Customer" }},</p>
+
+<p>Thank you for choosing Owner Inspections. We have successfully received your booking request and our team is currently reviewing it.</p>
+
+<h2>Booking Details</h2>
+<p>
+    <strong>Booking Reference:</strong> {{ bookingReference }}<br>
+    <strong>Service:</strong> {{ serviceName }}<br>
+    <strong>Property Address:</strong> {{ propertyAddress }}<br>
+    <strong>Requested Date:</strong> {{ requestedDate | date: "%d %B %Y" }}<br>
+    {% if requestedTime %}
+    <strong>Requested Time:</strong> {{ requestedTime }}<br>
+    {% endif %}
+</p>
+
+<h2>Contact Details</h2>
+<p>
+    <strong>Name:</strong> {{ customerName }}<br>
+    <strong>Email:</strong> {{ customerEmail }}<br>
+    <strong>Phone:</strong> {{ customerPhone }}
+</p>
+
+{% if totalAmount %}
+<h2>Quote Summary</h2>
+<p>
+    <strong>Total Amount:</strong> ${{ totalAmount }}
+</p>
+{% endif %}
+
+<h2>What Happens Next?</h2>
+<p>Our team will review your booking request and confirm the inspection schedule within 24 hours. You will receive a confirmation email once your booking has been approved and scheduled.</p>
+
+{% if bookingUrl %}
+<a href="{{ bookingUrl }}" class="button">View Booking Details</a>
+{% endif %}
+
+<p>If you have any questions or need to make changes to your booking, please contact us.</p>
+
+<p>
+    Best regards,<br>
+    <strong>Owner Inspections Team</strong>
+</p>
+{% endblock %}
+

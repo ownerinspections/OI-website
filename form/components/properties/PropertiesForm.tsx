@@ -73,7 +73,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 	});
 	const [propertyTypeValue, setPropertyTypeValue] = useState<string>(property?.property_type || "");
 	
-	// Additional fields for construction stages service (service 5)
+	// Additional fields for new construction stages service (service 5)
 	const [areaSizeValue, setAreaSizeValue] = useState<string>(property?.area_sq ? String(property.area_sq) : "");
 	const [numberOfLevelsValue, setNumberOfLevelsValue] = useState<string>(() => {
 		const levels = property?.number_of_levels;
@@ -165,11 +165,11 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		console.log("[PropertiesForm] Setting quoteEditable:", newQuoteEditable);
 		setQuoteEditable(newQuoteEditable);
 
-		// Also update numberOfLevelsValue for service 5 (construction stages)
+		// Also update numberOfLevelsValue for service 5 (new construction stages)
 		console.log("[PropertiesForm] Setting numberOfLevelsValue:", levelsValue);
 		setNumberOfLevelsValue(levelsValue);
 
-		// Also update areaSizeValue for service 5 (construction stages)
+		// Also update areaSizeValue for service 5 (new construction stages)
 		setAreaSizeValue(property?.area_sq ? String(property.area_sq) : "");
 
 		// Build client info preview from existing property record
@@ -269,7 +269,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 		return undefined;
 	}, [serverErrors.quoting_property_type, propertyTypeValue, showPropertyCategoryType, showValidationErrors]);
 
-	// Real-time validation for construction stages specific fields (service 5)
+	// Real-time validation for new construction stages specific fields (service 5)
 	const areaSizeError = useMemo(() => {
 		const serverError = serverErrors.area_sq;
 		if (serverError) return serverError;
@@ -699,7 +699,7 @@ export default function PropertiesForm({ property, propertyId, contactId, userId
 								{ value: "Other", label: "Other" },
 							]}
 						/>
-						{/* Additional fields for construction stages service (service 5) */}
+						{/* Additional fields for new construction stages service (service 5) */}
 						{serviceId === 5 ? (
 							<>
 								<TextField

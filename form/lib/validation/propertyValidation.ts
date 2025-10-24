@@ -56,7 +56,7 @@ export function validatePropertyForm(data: PropertyValidationData): PropertyVali
     }
   }
 
-  // Construction stages specific validation (service 5)
+  // New construction stages specific validation (service 5)
   if (data.serviceId === 5) {
     if (!data.areaSizeValue) {
       errors.areaSize = VALIDATION_MESSAGES.REQUIRED;

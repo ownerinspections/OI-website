@@ -159,7 +159,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 		if (!quoting_property_classification) errors.quoting_property_classification = VALIDATION_MESSAGES.PROPERTY_CLASSIFICATION_REQUIRED;
 		if (!quoting_property_type) errors.quoting_property_type = VALIDATION_MESSAGES.PROPERTY_TYPE_REQUIRED;
 		
-		// Construction stages specific fields (service 5)
+		// New construction stages specific fields (service 5)
 		if (serviceIdNumber === 5) {
 			if (!area_sq) errors.area_sq = VALIDATION_MESSAGES.REQUIRED;
 			if (!number_of_levels) errors.number_of_levels = VALIDATION_MESSAGES.LEVELS_REQUIRED;
@@ -224,7 +224,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 			number_of_levels: quoting_levels ? mapLevelsToNumber(quoting_levels) : (number_of_levels ? mapLevelsToNumber(number_of_levels) : null),
 			property_category: quoting_property_classification ? quoting_property_classification.toLowerCase() : null,
 			property_type: quoting_property_type || null,
-			// Construction stages specific fields
+			// New construction stages specific fields
 			area_sq: area_sq ? Number(area_sq) : null,
 			basement: quoting_has_basement_or_subfloor
 				? (quoting_has_basement_or_subfloor.toLowerCase() === "yes" ? true : quoting_has_basement_or_subfloor.toLowerCase() === "no" ? false : null)
@@ -249,7 +249,7 @@ export async function submitProperty(_prev: SubmitResult, formData: FormData): P
 
 		console.log("[submitProperty] Final payload:", {
 			...payload,
-			// Highlight construction stages specific fields
+			// Highlight new construction stages specific fields
 			area_sq: payload.area_sq,
 			number_of_levels: payload.number_of_levels,
 			property_category: payload.property_category,

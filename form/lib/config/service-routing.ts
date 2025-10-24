@@ -8,7 +8,7 @@ const SERVICE_TYPE_MAPPING: Record<number, string> = {
 	2: "02-pre-sales",              // Pre-Sales Inspection (service_type: "pre_sales")
 	3: "03-dilapidation",           // Dilapidation Inspection (service_type: "dilapidation")
 	4: "04-apartment-pre-settlement", // Apartment Pre Settlement Inspection (service_type: "apartment-pre-settlement")
-	5: "05-construction-stages",    // New Construction Stages Inspections (service_type: "construction_stages")
+	5: "05-new-construction-stages",    // New Construction Stages Inspections (service_type: "new_construction_stages")
 	6: "06-insurance-report",       // Insurance Report Inspection (service_type: "insurance_report")
 	7: "07-expert-witness-report",  // Expert Witness Report Inspection (service_type: "expert_witness_report")
 	8: "08-defects-investigation",  // Defects Investigation Inspection (service_type: "defects_investigation")
@@ -122,7 +122,8 @@ const SERVICE_TYPE_TO_ROUTE_MAPPING: Record<string, string> = {
 	"pre_sales": "02-pre-sales", 
 	"dilapidation": "03-dilapidation",
 	"apartment-pre-settlement": "04-apartment-pre-settlement",
-	"construction_stages": "05-construction-stages",
+	"new_construction_stages": "05-new-construction-stages",
+	"construction_stages": "05-new-construction-stages", // Legacy alias
 	"insurance_report": "06-insurance-report",
 	"expert_witness_report": "07-expert-witness-report",
 	"defects_investigation": "08-defects-investigation",

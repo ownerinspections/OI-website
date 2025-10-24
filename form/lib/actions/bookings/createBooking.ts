@@ -120,6 +120,18 @@ export async function ensureBooking(params: {
     const created = await postRequest<DirectusItemResponse<BookingRecord>>("/items/bookings", payload);
     const createdBooking = (created as any)?.data as BookingRecord;
 
+    // Update deal with booking reference
+    if (createdBooking?.id && params.dealId) {
+        try {
+            await patchRequest(`/items/os_deals/${encodeURIComponent(String(params.dealId))}`, {
+                booking: String(createdBooking.id)
+            });
+            console.log(`[ensureBooking] Successfully linked booking ${createdBooking.id} to deal ${params.dealId}`);
+        } catch (error) {
+            console.error(`[ensureBooking] Failed to link booking ${createdBooking.id} to deal ${params.dealId}:`, error);
+        }
+    }
+
     // Update booking with booking_link after creation
     if (createdBooking?.id) {
         try {

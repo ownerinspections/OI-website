@@ -34,7 +34,7 @@ _SERVICE_MODULE_CACHE: Dict[str, Any] = {}
 _SERVICE_ALIASES = {
     "oi-950-1": "pre_purchase",
     # Backward-compatible alias: old service key points to new module name
-    "oi-950-3": "construction_stages",
+    "oi-950-3": "new_construction_stages",
     "prepurchase": "pre_purchase",
     "pre-purchase": "pre_purchase",
     "pre_purchase": "pre_purchase",
@@ -42,7 +42,8 @@ _SERVICE_ALIASES = {
     "presales": "pre_sales",
     "pre_sales": "pre_sales",
     "dilapidation": "dilapidation",
-    "construction_stages": "construction_stages",
+    "construction_stages": "new_construction_stages",
+    "new_construction_stages": "new_construction_stages",
     # Apartment pre-settlement aliases
     "apartment-pre-settlement": "apartment_pre_settlement",
     "apartment_pre_settlement": "apartment_pre_settlement",
@@ -62,7 +63,7 @@ _SERVICE_NOTES: Dict[str, str] = {
     "pre_purchase": "this is a test note for pre_purchase",
     "pre_sales": "this is a test note for pre_sales",
     "dilapidation": "this is a test note for dilapidation",
-    "construction_stages": "this is a test note for construction stages",
+    "new_construction_stages": "this is a test note for new construction stages",
     "apartment_pre_settlement": "this is a test note for apartment pre-settlement",
     "insurance_report": "this is a test note for insurance report",
     "defects_investigation": "this is a test note for defects investigation",
@@ -132,7 +133,7 @@ def _run_service_calculation(service_name: str, params: Dict[str, Any]) -> Dict[
         raise HTTPException(status_code=500, detail="Service field 'quote_price' is not numeric") from exc
 
     response: Dict[str, Any] = {"quote_price": result["quote_price"]}
-    # Pass through stage_prices if provided by the calculator (e.g., construction stages)
+    # Pass through stage_prices if provided by the calculator (e.g., new construction stages)
     if isinstance(result.get("stage_prices"), list):
         normalized_stage_prices: List[Dict[str, int]] = []
         for item in result["stage_prices"]:

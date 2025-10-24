@@ -1,0 +1,54 @@
+{% extends "base.liquid" %}
+
+{% block content %}
+<h1>Payment Failed</h1>
+
+<div class="alert-error">
+    <strong>Payment Unsuccessful</strong><br>
+    We were unable to process your payment.
+</div>
+
+<p>Hi {{ customerName | default: "Valued Customer" }},</p>
+
+<p>We attempted to process your payment but unfortunately it was not successful.</p>
+
+<h2>Payment Details</h2>
+<p>
+    <strong>Amount:</strong> ${{ amount | default: "0.00" }}<br>
+    <strong>Date:</strong> {{ attemptDate | date: "%d %B %Y at %I:%M %p" }}<br>
+    {% if failureReason %}
+    <strong>Reason:</strong> {{ failureReason }}<br>
+    {% endif %}
+</p>
+
+{% if bookingReference %}
+<h2>Booking Details</h2>
+<p>
+    <strong>Booking Reference:</strong> {{ bookingReference }}<br>
+    <strong>Service:</strong> {{ serviceName }}<br>
+    <strong>Property Address:</strong> {{ propertyAddress }}<br>
+    <strong>Inspection Date:</strong> {{ inspectionDate | date: "%d %B %Y" }}
+</p>
+{% endif %}
+
+<h2>What's Next?</h2>
+<p>To complete your booking, please try processing your payment again. Common reasons for payment failures include:</p>
+<ul>
+    <li>Insufficient funds</li>
+    <li>Incorrect card details</li>
+    <li>Card expired</li>
+    <li>Payment declined by your bank</li>
+</ul>
+
+{% if retryPaymentUrl %}
+<a href="{{ retryPaymentUrl }}" class="button">Retry Payment</a>
+{% endif %}
+
+<p>If you continue to experience issues or have tried a different payment method, please contact us and we'll be happy to assist you.</p>
+
+<p>
+    Best regards,<br>
+    <strong>Owner Inspections Team</strong>
+</p>
+{% endblock %}
+

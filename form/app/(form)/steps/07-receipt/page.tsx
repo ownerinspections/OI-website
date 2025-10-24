@@ -47,7 +47,7 @@ export default async function ReceiptStep({ searchParams }: { searchParams?: Pro
 		"02-pre-sales": "pre-sales",
 		"03-dilapidation": "dilapidation",
 		"04-apartment-pre-settlement": "apartment-pre-settlement",
-		"05-construction-stages": "construction-stages",
+		"05-new-construction-stages": "new-construction-stages",
 		"06-insurance-report": "insurance-report",
 		"07-expert-witness-report": "expert-witness-report",
 		"08-defects-investigation": "defects-investigation",

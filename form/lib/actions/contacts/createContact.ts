@@ -7,7 +7,7 @@ import { DEAL_OWNER_ID, DEAL_STAGE_NEW_ID, KONG_GATEWAY_URL, DEAL_NAME } from "@
 import { getServiceById } from "@/lib/actions/services/getService";
 import { updateContact } from "@/lib/actions/contacts/updateContact";
 import { updateDeal } from "@/lib/actions/deals/updateDeal";
-import { createOrUpdateUserForContact } from "@/lib/actions/users/createUser";
+import { createOrUpdateUserForContact, type DirectusUserRecord } from "@/lib/actions/users/createUser";
 import { updateUser } from "@/lib/actions/users/updateUser";
 import { getDeal } from "@/lib/actions/deals/getDeal";
 import { cookies, headers } from "next/headers";
@@ -275,27 +275,55 @@ export async function submitContact(prevState: ActionResult, formData: FormData)
 
 	const resolvedContactId = contactResult.contactId;
 
-	// Use existing userId if provided, otherwise ensure a Directus user exists for the contact
+	// Use existing userId if provided, otherwise find or create a Directus user for the contact
 	let userIdForDeal: string | undefined = user_id_raw || undefined;
 	
 	if (!user_id_raw) {
-		// Only create/update user if no userId was provided in URL
+		// No userId provided - check if user exists by email, if not create new user
 		try {
-			const passwordFromPhone = payload.phone.replace(/^\+/, "");
-			const userRes = await createOrUpdateUserForContact({
-				first_name: payload.first_name,
-				last_name: payload.last_name,
-				email: payload.email,
-				password: passwordFromPhone,
-				phone: payload.phone,
-				contact_id: resolvedContactId || undefined,
-			});
-			userIdForDeal = userRes.userId;
-			debug.push({ tag: "user_sync", success: userRes.success, userId: userRes.userId });
+			// First, try to find existing user by email
+			const encodedEmail = encodeURIComponent(payload.email);
+			const existingUser = await getRequest<DirectusListResponse<DirectusUserRecord>>(
+				`/users?filter%5Bemail%5D%5B_eq%5D=${encodedEmail}`
+			);
+			
+			if (Array.isArray(existingUser?.data) && existingUser.data.length > 0) {
+				// User exists - use existing user ID and update their information
+				userIdForDeal = existingUser.data[0].id;
+				debug.push({ tag: "user_found_existing", userId: userIdForDeal, email: payload.email });
+				
+				// Update existing user with new information
+				try {
+					await updateUser(userIdForDeal, {
+						first_name: payload.first_name,
+						last_name: payload.last_name,
+						phone: payload.phone,
+					});
+					debug.push({ tag: "user_updated_existing", userId: userIdForDeal });
+				} catch (updateError) {
+					// User update failed, but continue with existing user ID
+					debug.push({ tag: "user_update_failed", userId: userIdForDeal, error: String(updateError) });
+				}
+			} else {
+				// User doesn't exist - create new user
+				const passwordFromPhone = payload.phone.replace(/^\+/, "");
+				const userRes = await createOrUpdateUserForContact({
+					first_name: payload.first_name,
+					last_name: payload.last_name,
+					email: payload.email,
+					password: passwordFromPhone,
+					phone: payload.phone,
+					contact_id: resolvedContactId || undefined,
+				});
+				userIdForDeal = userRes.userId;
+				debug.push({ tag: "user_created_new", success: userRes.success, userId: userRes.userId });
+			}
 		} catch (_e) {
 			debug.push({ tag: "user_sync_error", error: String(_e) });
 		}
 	} else {
+		// User ID provided - use existing user
+		userIdForDeal = user_id_raw;
 		debug.push({ tag: "user_existing", userId: user_id_raw });
 	}
 	

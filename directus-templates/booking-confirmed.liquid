@@ -1,0 +1,66 @@
+{% extends "base.liquid" %}
+
+{% block content %}
+<h1>Booking Confirmed</h1>
+
+<div class="alert-success">
+    <strong>Your inspection is scheduled!</strong><br>
+    Your booking has been confirmed and scheduled.
+</div>
+
+<p>Hi {{ customerName | default: "Valued Customer" }},</p>
+
+<p>Great news! Your inspection booking has been confirmed. Our team is ready to conduct your property inspection on the scheduled date.</p>
+
+<h2>Booking Details</h2>
+<p>
+    <strong>Booking Reference:</strong> {{ bookingReference }}<br>
+    <strong>Service:</strong> {{ serviceName }}<br>
+    <strong>Property Address:</strong> {{ propertyAddress }}<br>
+    <strong>Inspection Date:</strong> {{ inspectionDate | date: "%d %B %Y" }}<br>
+    <strong>Inspection Time:</strong> {{ inspectionTime }}<br>
+    {% if inspectorName %}
+    <strong>Inspector:</strong> {{ inspectorName }}<br>
+    {% endif %}
+    {% if duration %}
+    <strong>Duration:</strong> {{ duration }}<br>
+    {% endif %}
+</p>
+
+<h2>Contact Details</h2>
+<p>
+    <strong>Name:</strong> {{ customerName }}<br>
+    <strong>Email:</strong> {{ customerEmail }}<br>
+    <strong>Phone:</strong> {{ customerPhone }}
+</p>
+
+{% if totalAmount %}
+<h2>Payment Summary</h2>
+<p>
+    <strong>Total Amount:</strong> ${{ totalAmount }}<br>
+    {% if paymentStatus %}
+    <strong>Payment Status:</strong> {{ paymentStatus }}
+    {% endif %}
+</p>
+{% endif %}
+
+<h2>Important Information</h2>
+<ul>
+    <li>Please ensure someone is available to provide access to the property</li>
+    <li>Our inspector will arrive at the scheduled time</li>
+    <li>You will receive your inspection report within 24-48 hours after completion</li>
+    <li>If you need to reschedule, please contact us at least 24 hours in advance</li>
+</ul>
+
+{% if bookingUrl %}
+<a href="{{ bookingUrl }}" class="button">View Booking Details</a>
+{% endif %}
+
+<p>We look forward to providing you with a thorough and professional inspection service.</p>
+
+<p>
+    Best regards,<br>
+    <strong>Owner Inspections Team</strong>
+</p>
+{% endblock %}
+

@@ -1,0 +1,384 @@
+.container {
+  min-height: 100vh;
+  background: var(--pale-gray);
+}
+
+.content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  padding: 2rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--white);
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.card h2 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--primary-blue);
+}
+
+.card h3 {
+  margin: 1.5rem 0 1rem 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.card h4 {
+  margin: 1rem 0 0.75rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--dark-gray);
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .twoColumn {
+    grid-template-columns: 1fr;
+  }
+}
+
+.twoColumn .formGroup {
+  margin-bottom: 0;
+}
+
+.threeColumn {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .threeColumn {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .threeColumn {
+    grid-template-columns: 1fr;
+  }
+}
+
+.twoColumnStages {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .twoColumnStages {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formGroup {
+  margin-bottom: 1.25rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--charcoal);
+  font-size: 0.875rem;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--light-gray);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s;
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--secondary-blue);
+}
+
+.select {
+  background: var(--white);
+  cursor: pointer;
+}
+
+.toggleSection {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.toggleItem {
+  margin-bottom: 0;
+}
+
+.toggleItem label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--charcoal);
+}
+
+.toggleItem input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  accent-color: var(--secondary-blue);
+}
+
+.toggleItem span {
+  user-select: none;
+}
+
+.response {
+  font-size: 0.875rem;
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--medium-gray);
+  font-style: italic;
+}
+
+.error {
+  padding: 1rem;
+  background: #fef2f2;
+  border: 1px solid var(--error-red);
+  border-radius: 6px;
+  color: var(--error-red);
+  font-size: 0.875rem;
+}
+
+.priceMain {
+  background: linear-gradient(135deg, var(--primary-blue), var(--secondary-blue));
+  color: var(--white);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.priceLabel {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  margin-bottom: 0.25rem;
+}
+
+.priceValue {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.priceBreakdown {
+  margin-top: 1.5rem;
+}
+
+.priceBreakdown h4 {
+  margin: 0 0 0.75rem 0;
+}
+
+.priceRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+.priceRow span:first-child {
+  color: var(--dark-gray);
+}
+
+.priceRow span:last-child {
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.highlight {
+  color: var(--secondary-blue) !important;
+  font-size: 1.125rem !important;
+}
+
+.discount {
+  color: var(--error-red) !important;
+}
+
+.final {
+  color: var(--success-green) !important;
+  font-size: 1.25rem !important;
+}
+
+.stages {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--pale-gray);
+  border-radius: 6px;
+}
+
+.stageRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.addonsBreakdown {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f0f9ff;
+  border-radius: 6px;
+}
+
+.addonRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--dark-gray);
+}
+
+.addonTotal {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--secondary-blue);
+  font-weight: 600;
+  color: var(--charcoal);
+}
+
+.note {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #fffbeb;
+  border-left: 3px solid var(--warning-orange);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: var(--dark-gray);
+}
+
+.rawJson {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--pale-gray);
+  border-radius: 6px;
+  font-size: 0.75rem;
+}
+
+.rawJson summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--dark-gray);
+  margin-bottom: 0.5rem;
+}
+
+.rawJson pre {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--charcoal);
+  color: var(--success-green);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.formSection {
+  min-height: 100%;
+}
+
+.responseSection {
+  position: sticky;
+  top: 2rem;
+  height: fit-content;
+}
+
+.buttonGroup {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.copyButton,
+.showButton {
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.copyButton {
+  background: var(--secondary-blue);
+  color: var(--white);
+}
+
+.copyButton:hover {
+  background: var(--primary-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(11, 72, 123, 0.2);
+}
+
+.copyButton:active {
+  transform: translateY(0);
+}
+
+.showButton {
+  background: var(--primary-blue);
+  color: var(--white);
+}
+
+.showButton:hover {
+  background: var(--secondary-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(44, 155, 214, 0.2);
+}
+
+.showButton:active {
+  transform: translateY(0);
+}
+

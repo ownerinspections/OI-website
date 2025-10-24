@@ -4,6 +4,7 @@ import { getRequest, patchRequest, postRequest } from "@/lib/http/fetcher";
 import { createContact } from "@/lib/actions/contacts/createContact";
 import { updateContact } from "@/lib/actions/contacts/updateContact";
 import { redirect } from "next/navigation";
+import { DEAL_STAGE_BOOKED_ID } from "@/lib/env";
 
 export type BookingActionResult = {
 	success?: boolean;
@@ -582,9 +583,17 @@ export async function submitBooking(prevState: BookingActionResult, formData: Fo
 			console.log(`✅ [SUBMIT BOOKING] Successfully updated booking status to 'booked'`);
 		}
 		
-		// Update deal with contact_person and price for all inspections
+		// Update deal with contact_person, deal stage, and price for all inspections
 		if (dealId) {
 			const dealUpdateData: Record<string, unknown> = {};
+			
+			// Update deal stage to "booked"
+			if (DEAL_STAGE_BOOKED_ID) {
+				dealUpdateData.deal_stage = DEAL_STAGE_BOOKED_ID;
+				console.log(`🎯 [SUBMIT BOOKING] Setting deal ${dealId} stage to BOOKED (${DEAL_STAGE_BOOKED_ID})`);
+			} else {
+				console.warn(`⚠️ [SUBMIT BOOKING] DEAL_STAGE_BOOKED_ID is not configured in environment variables`);
+			}
 			
 			// Handle contact person updates based on inspection type
 			if (inspectionType === "dilapidation") {

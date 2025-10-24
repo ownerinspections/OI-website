@@ -175,7 +175,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			console.warn("Failed to fetch service stages:", error);
 		}
 		
-		// Use service-specific quote estimation for construction stages
+		// Use service-specific quote estimation for new construction stages
 		const propertyDetails: PropertyDetails = {
 			property_category,
 			stages: allServiceStages.length > 0 
@@ -192,7 +192,7 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 			// Store estimate data for new proposals too
 			estimateData = estimate;
 		} catch (error) {
-			console.warn("[StepQuote] Construction stages quote estimation failed:", error);
+			console.warn("[StepQuote] New construction stages quote estimation failed:", error);
 		}
 		console.log("[StepQuote] Creating proposal with", { dealId, contactId, propertyId, amount, note, userId });
 		const created = await createProposal({ dealId, contactId, propertyId, amount, note, userId });
@@ -303,9 +303,9 @@ export default async function StepQuote({ searchParams }: { searchParams?: Promi
 					// Fallback: Use available addons (1-9) when configured addon IDs don't exist
 					const fallbackAddonIds = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // All available addons
 					const fallbackIdsCsv = fallbackAddonIds.join(",");
-					console.log("[StepQuote] Fetching fallback addon details for construction stages IDs:", fallbackIdsCsv);
+					console.log("[StepQuote] Fetching fallback addon details for new construction stages IDs:", fallbackIdsCsv);
 					const fallbackAddonsRes = await getRequest<{ data: any[] }>(`/items/addons?filter%5Bid%5D%5B_in%5D=${encodeURIComponent(fallbackIdsCsv)}`);
-					console.log("[StepQuote] Fallback addons response for construction stages:", fallbackAddonsRes);
+					console.log("[StepQuote] Fallback addons response for new construction stages:", fallbackAddonsRes);
 					
 					if (Array.isArray((fallbackAddonsRes as any)?.data) && (fallbackAddonsRes as any).data.length > 0) {
 						addons = ((fallbackAddonsRes as any).data).map((a: any) => ({

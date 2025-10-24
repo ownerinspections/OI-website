@@ -169,7 +169,7 @@ export default async function ConstructionStagesInvoiceStep({ searchParams }: { 
 			
 			// If no stages found, fallback to service name with full amount
 			if (displayLineItems.length === 0) {
-				let serviceName: string = "Construction Stages Inspection";
+				let serviceName: string = "New Construction Stages Inspection";
 				if (deal?.service) {
 					try {
 						const serviceRes = await getRequest<{ data: { service_name?: string; service_type?: string } }>(`/items/services/${encodeURIComponent(String(deal.service))}?fields=service_name,service_type`);
@@ -396,9 +396,9 @@ export default async function ConstructionStagesInvoiceStep({ searchParams }: { 
 		<div className="container">
 			<div className="card">
 				<FormHeader
-					rightTitle="Invoice"
-					rightSubtitle="Construction Stages Inspection"
-					rightMeta={[
+				rightTitle="Invoice"
+				rightSubtitle="New Construction Stages Inspection"
+				rightMeta={[
 						{ label: "Invoice #", value: invoiceNumber },
 						{ label: "Issue Date", value: issueDateFmt },
 						{ label: "Due Date", value: dueDateFmt },

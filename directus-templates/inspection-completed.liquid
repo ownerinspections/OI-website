@@ -1,0 +1,62 @@
+{% extends "base.liquid" %}
+
+{% block content %}
+<h1>Inspection Completed</h1>
+
+<div class="alert-success">
+    <strong>Inspection Complete!</strong><br>
+    Your property inspection has been successfully completed.
+</div>
+
+<p>Hi {{ customerName | default: "Valued Customer" }},</p>
+
+<p>Thank you for choosing Owner Inspections. We have completed the inspection of your property and your detailed report is now being prepared.</p>
+
+<h2>Inspection Details</h2>
+<p>
+    <strong>Booking Reference:</strong> {{ bookingReference }}<br>
+    <strong>Service:</strong> {{ serviceName }}<br>
+    <strong>Property Address:</strong> {{ propertyAddress }}<br>
+    <strong>Inspection Date:</strong> {{ inspectionDate | date: "%d %B %Y" }}<br>
+    {% if inspectorName %}
+    <strong>Inspector:</strong> {{ inspectorName }}<br>
+    {% endif %}
+    <strong>Completed On:</strong> {{ completedDate | date: "%d %B %Y at %I:%M %p" }}
+</p>
+
+<h2>What's Next?</h2>
+<p>Your comprehensive inspection report is currently being finalized by our team. The report will include:</p>
+<ul>
+    <li>Detailed findings from the inspection</li>
+    <li>High-quality photographs</li>
+    <li>Professional recommendations</li>
+    <li>Areas of concern (if any)</li>
+</ul>
+
+<p><strong>Report Delivery:</strong> You will receive your complete inspection report via email within 24-48 hours.</p>
+
+{% if reportUrl %}
+<div class="alert-info">
+    <strong>Report Ready!</strong><br>
+    Your inspection report is now available to view.
+</div>
+<a href="{{ reportUrl }}" class="button">View Report</a>
+{% else %}
+<p class="alert-info">We will send you another email as soon as your report is ready for download.</p>
+{% endif %}
+
+{% if bookingUrl %}
+<p><a href="{{ bookingUrl }}" class="link">View booking details</a></p>
+{% endif %}
+
+<h2>Need Assistance?</h2>
+<p>If you have any questions about the inspection or need clarification on any findings, our team is here to help.</p>
+
+<p>Thank you for trusting us with your property inspection needs. We hope to serve you again in the future.</p>
+
+<p>
+    Best regards,<br>
+    <strong>Owner Inspections Team</strong>
+</p>
+{% endblock %}
+

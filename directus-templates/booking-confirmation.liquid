@@ -1,0 +1,56 @@
+{% layout "base" %}
+
+{% block content %}
+    <h1>Booking Confirmation</h1>
+    
+    <p>Hi{% if firstname %} {{ firstname }}{% endif %},</p>
+    
+    <p>Your inspection booking has been confirmed!</p>
+    
+    <div class="alert-success">
+        <strong>Booking Confirmed</strong>
+    </div>
+    
+    <h2>Booking Details</h2>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr style="border-bottom: 1px solid #d9d9d9;">
+            <td style="padding: 12px 0; color: #595959; font-weight: 600;">Booking ID:</td>
+            <td style="padding: 12px 0; color: #262626;">{% if booking_id %}{{ booking_id }}{% else %}N/A{% endif %}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #d9d9d9;">
+            <td style="padding: 12px 0; color: #595959; font-weight: 600;">Service:</td>
+            <td style="padding: 12px 0; color: #262626;">{% if service_name %}{{ service_name }}{% else %}N/A{% endif %}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #d9d9d9;">
+            <td style="padding: 12px 0; color: #595959; font-weight: 600;">Date & Time:</td>
+            <td style="padding: 12px 0; color: #262626;">{% if booking_date %}{{ booking_date }}{% else %}N/A{% endif %}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #d9d9d9;">
+            <td style="padding: 12px 0; color: #595959; font-weight: 600;">Property Address:</td>
+            <td style="padding: 12px 0; color: #262626;">{% if property_address %}{{ property_address }}{% else %}N/A{% endif %}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #d9d9d9;">
+            <td style="padding: 12px 0; color: #595959; font-weight: 600;">Total Amount:</td>
+            <td style="padding: 12px 0; color: #262626; font-weight: 600;">{% if total_amount %}${{ total_amount }}{% else %}N/A{% endif %}</td>
+        </tr>
+    </table>
+    
+    <h2>What to Expect</h2>
+    
+    <p>Our inspector will arrive at the scheduled time. Please ensure:</p>
+    
+    <ul style="color: #595959; line-height: 1.8;">
+        <li>All areas of the property are accessible</li>
+        <li>Utilities (water, electricity) are connected and working</li>
+        <li>Any pets are secured safely</li>
+    </ul>
+    
+    <div style="text-align: center;">
+        <a href="{{ projectUrl | default: 'https://ownerinspections.com.au' }}/bookings/{{ booking_id }}" class="button">View Booking Details</a>
+    </div>
+    
+    <p>If you need to reschedule or have any questions, please contact us as soon as possible.</p>
+    
+    <p>Best regards,<br>The {{ projectName | default: "Owner Inspections" }} Team</p>
+{% endblock %}

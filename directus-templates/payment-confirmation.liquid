@@ -1,0 +1,47 @@
+{% extends "base.liquid" %}
+
+{% block content %}
+<h1>Payment Confirmed</h1>
+
+<div class="alert-success">
+    <strong>Payment Successful</strong><br>
+    Your payment has been processed successfully.
+</div>
+
+<p>Hi {{ customerName | default: "Valued Customer" }},</p>
+
+<p>Thank you for your payment. We have successfully received and processed your payment for your inspection booking.</p>
+
+<h2>Payment Details</h2>
+<p>
+    <strong>Transaction ID:</strong> {{ transactionId }}<br>
+    <strong>Amount Paid:</strong> ${{ amount | default: "0.00" }}<br>
+    <strong>Payment Method:</strong> {{ paymentMethod | default: "Card" }}<br>
+    <strong>Date:</strong> {{ paymentDate | date: "%d %B %Y at %I:%M %p" }}
+</p>
+
+{% if bookingReference %}
+<h2>Booking Details</h2>
+<p>
+    <strong>Booking Reference:</strong> {{ bookingReference }}<br>
+    <strong>Service:</strong> {{ serviceName }}<br>
+    <strong>Property Address:</strong> {{ propertyAddress }}<br>
+    <strong>Inspection Date:</strong> {{ inspectionDate | date: "%d %B %Y" }}<br>
+    <strong>Inspection Time:</strong> {{ inspectionTime }}
+</p>
+{% endif %}
+
+<p>A receipt for this payment has been sent to your email address.</p>
+
+{% if bookingUrl %}
+<a href="{{ bookingUrl }}" class="button">View Booking Details</a>
+{% endif %}
+
+<p>If you have any questions about your payment or booking, please don't hesitate to contact us.</p>
+
+<p>
+    Best regards,<br>
+    <strong>Owner Inspections Team</strong>
+</p>
+{% endblock %}
+

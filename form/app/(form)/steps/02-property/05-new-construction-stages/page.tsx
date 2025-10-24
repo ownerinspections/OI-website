@@ -36,9 +36,9 @@ export default async function ConstructionStagesPropertyStep({ searchParams }: {
 		<div className="container">
 			<div className="card">
 				<FormHeader
-					rightTitle="Property Details"
-					rightSubtitle="Construction Stages Inspection"
-				/>
+				rightTitle="Property Details"
+				rightSubtitle="New Construction Stages Inspection"
+			/>
 				<PropertiesForm 
 					property={property} 
 					dealId={dealId} 

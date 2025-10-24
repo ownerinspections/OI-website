@@ -1,0 +1,174 @@
+services:
+  directus:
+    image: directus/directus:latest
+    ports:
+      - 8055:8055
+    volumes:
+      - directus-uploads-owner:/directus/uploads
+      - directus-extensions-owner:/directus/extensions
+      - ./directus-templates:/directus/templates
+    depends_on:
+      directus-database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SECRET: "SqBnBMBiKBKGiLpXOgI5bH5go5X4rrpMvzpLzpbrDxk="
+      DB_CLIENT: "pg"
+      DB_HOST: "directus-database"
+      DB_PORT: "5432"
+      DB_DATABASE: "directus"
+      DB_USER: "directus"
+      DB_PASSWORD: "directus"
+      CACHE_ENABLED: "true"
+      CACHE_AUTO_PURGE: "true"
+      CACHE_STORE: "redis"
+      # Use Docker network name for in-cluster connection; do not use host loopback
+      REDIS: "redis://:HnehwkHk21ikJHFJL@redis:6379"
+      ADMIN_EMAIL: "mehdiitaleghanii@gmail.com"
+      ADMIN_PASSWORD: "123456"
+      PUBLIC_URL: "http://localhost:8055"
+      CONTENT_SECURITY_POLICY_DIRECTIVES__CONNECT_SRC: "'self' http://localhost:8000 http://kong:8000 https://* wss://*"
+      
+      # Email Configuration - Mailgun
+      EMAIL_TRANSPORT: "mailgun"
+      EMAIL_MAILGUN_API_KEY: "${MAILGUN_API_KEY}"
+      EMAIL_MAILGUN_DOMAIN: "owner-inspections.com.au"
+      EMAIL_MAILGUN_HOST: "api.mailgun.net"
+      EMAIL_FROM: "noreply@owner-inspections.com.au"
+      EMAIL_TEMPLATES_PATH: "/directus/templates"
+
+    networks:
+      - strapi
+
+
+
+  directus-database:
+    container_name: directus-database
+    platform: linux/amd64 # for platform error on Apple M1 chips
+    restart: unless-stopped
+    image: postgis/postgis:17-master
+    environment:
+      POSTGRES_USER: "directus"
+      POSTGRES_PASSWORD: "directus"
+      POSTGRES_DB: "directus"
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=directus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    volumes:
+      - directus-data-owner:/var/lib/postgresql/data/
+    networks:
+      - strapi
+
+  redis:
+    container_name: redis
+    image: redis:7
+    restart: always
+    command: >
+      --requirepass HnehwkHk21ikJHFJL
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "HnehwkHk21ikJHFJL", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    networks:
+      - strapi
+
+  kong-database:
+    container_name: kong-database
+    platform: linux/amd64
+    image: postgres:16.0-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong-data-owner:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    networks:
+      - strapi
+
+  kong-migrations:
+    image: kong:3.9
+    command: kong migrations bootstrap
+    depends_on:
+      - kong-database
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PASSWORD: kongadmin
+    restart: on-failure
+    networks:
+      - strapi
+
+  kong:
+    container_name: kong
+    image: kong:3.9
+    restart: unless-stopped
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_MANAGER_LISTEN: 0.0.0.0:8002
+      KONG_PORTAL: "on"
+      KONG_LICENSE_DATA: ""
+    ports:
+      - "8000:8000"  # Proxy
+      - "8443:8443"  # Proxy SSL
+      - "8001:8001"  # Admin API
+      - "8002:8002"  # Kong Manager UI
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - strapi
+
+  rate-engine:
+    image: australia-southeast1-docker.pkg.dev/psychic-apex-466712-v5/oiregistery/rate-engine:latest
+    container_name: rate-engine
+    environment:
+      KONG_GATEWAY_URL: "http://kong:8000"
+    ports:
+      - "8010:8010"
+    depends_on:
+      - kong
+    networks:
+      - strapi
+
+volumes:
+  kong-data-owner:
+  directus-data-owner:
+  directus-extensions-owner:
+  directus-uploads-owner:
+networks:
+  strapi:
+    name: Strapi
+    driver: bridge

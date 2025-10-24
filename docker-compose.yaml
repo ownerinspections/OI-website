@@ -1,0 +1,277 @@
+services:
+  directus:
+    image: directus/directus:latest
+    ports:
+      - 8055:8055
+    volumes:
+      - directus-uploads-owner:/directus/uploads
+      - directus-extensions-owner:/directus/extensions
+      - ./templates:/directus/templates
+    depends_on:
+      directus-database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SECRET: "SqBnBMBiKBKGiLpXOgI5bH5go5X4rrpMvzpLzpbrDxk="
+      DB_CLIENT: "pg"
+      DB_HOST: "directus-database"
+      DB_PORT: "5432"
+      DB_DATABASE: "directus"
+      DB_USER: "directus"
+      DB_PASSWORD: "directus"
+      CACHE_ENABLED: "true"
+      CACHE_AUTO_PURGE: "true"
+      CACHE_STORE: "redis"
+      # Use Docker network name for in-cluster connection; do not use host loopback
+      REDIS: "redis://:HnehwkHk21ikJHFJL@redis:6379"
+      ADMIN_EMAIL: "mehdiitaleghanii@gmail.com"
+      ADMIN_PASSWORD: "123456"
+      PUBLIC_URL: "http://localhost:8055"
+      CONTENT_SECURITY_POLICY_DIRECTIVES__CONNECT_SRC: "'self' http://localhost:8000 http://kong:8000 https://* wss://*"
+      
+      # Email Configuration - Mailgun
+      EMAIL_TRANSPORT: "mailgun"
+      EMAIL_MAILGUN_API_KEY: "${MAILGUN_API_KEY}"
+      EMAIL_MAILGUN_DOMAIN: "owner-inspections.com.au"
+      EMAIL_MAILGUN_HOST: "api.mailgun.net"
+      EMAIL_FROM: "noreply@owner-inspections.com.au"
+
+    networks:
+      - ownerinspections-network
+
+
+
+  directus-database:
+    container_name: directus-database
+    platform: linux/amd64 # for platform error on Apple M1 chips
+    restart: unless-stopped
+    image: postgis/postgis:17-master
+    environment:
+      POSTGRES_USER: "directus"
+      POSTGRES_PASSWORD: "directus"
+      POSTGRES_DB: "directus"
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=directus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    volumes:
+      - directus-data-owner:/var/lib/postgresql/data/
+    networks:
+      - ownerinspections-network
+
+  redis:
+    container_name: redis
+    image: redis:7
+    restart: always
+    command: >
+      --requirepass HnehwkHk21ikJHFJL
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "HnehwkHk21ikJHFJL", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    networks:
+      - ownerinspections-network
+
+  kong-database:
+    container_name: kong-database
+    platform: linux/amd64
+    image: postgres:16.0-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong-data-owner:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    networks:
+      - ownerinspections-network
+
+  kong-migrations:
+    image: kong:3.9
+    command: kong migrations bootstrap
+    depends_on:
+      - kong-database
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PASSWORD: kongadmin
+    restart: on-failure
+    networks:
+      - ownerinspections-network
+
+  kong:
+    container_name: kong
+    image: kong:3.9
+    restart: unless-stopped
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_MANAGER_LISTEN: 0.0.0.0:8002
+      KONG_PORTAL: "on"
+      KONG_LICENSE_DATA: ""
+    ports:
+      - "8000:8000"  # Proxy
+      - "8443:8443"  # Proxy SSL
+      - "8001:8001"  # Admin API
+      - "8002:8002"  # Kong Manager UI
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ownerinspections-network
+
+  rate-engine:
+    build:
+      context: ./rate_engine
+      dockerfile: Dockerfile
+    container_name: rate-engine
+    environment:
+      KONG_GATEWAY_URL: "http://kong:8000"
+    ports:
+      - "8010:8010"
+    depends_on:
+      - kong
+    networks:
+      - ownerinspections-network
+
+  form:
+    build:
+      context: ./form
+      dockerfile: Dockerfile
+      args:
+        KONG_GATEWAY_URL: "http://kong:8000"
+        STRIPE_SECRET_KEY: "sk_test_51NTDlZByWX5SYeSd27YLiMZVSdMojg2AXITPt46XPZ9Jq4wfdO1EBhuCWlQx7Tr9nePOjM6vZb8h5b1yzGL4uahF00LWAbUypN"
+        VERIFY_SERVICE_SID: "AC18a98df495d807de599da357c22a44f9"
+        APP_BASE_URL: "http://localhost:8030"
+        CLIENT_ROLE_ID: "edc2e863-e2c4-4ee3-bcbd-d090df2911e1"
+    container_name: form
+    restart: unless-stopped
+    ports:
+      - "8030:8030"
+    depends_on:
+      - kong
+      - directus
+    environment:
+      # Kong API Gateway Configuration
+      KONG_GATEWAY_URL: "http://kong:8000"
+      
+      # Stripe Configuration
+      STRIPE_SECRET_KEY: "sk_test_51NTDlZByWX5SYeSd27YLiMZVSdMojg2AXITPt46XPZ9Jq4wfdO1EBhuCWlQx7Tr9nePOjM6vZb8h5b1yzGL4uahF00LWAbUypN"
+      STRIPE_WEBHOOK_SECRET: "whsec_your_webhook_secret_here"
+      STRIPE_PUBLISHABLE_KEY: "pk_test_51NTDlZByWX5SYeSdgxNK7jKxPUtDduKXX202HuYBLTEuhjdxVo4aIeWHeV87XJdLKBiHsCAxpm9eqfpu2xx0iWGE000sct16aB"
+      
+      # Important Environment Variables (Recommended for Production)
+      APP_BASE_URL: "https://form.owner-inspections.com.au"
+      CLIENT_ROLE_ID: "edc2e863-e2c4-4ee3-bcbd-d090df2911e1"
+      
+      # Deal Configuration
+      DEAL_OWNER_ID: "2b68c99b-1127-4ee6-aa4a-8c383361bd60"
+      DEAL_STAGE_NEW_ID: "3a666413-ba6d-48e4-8f56-b60d91b731ef"
+      DEAL_STAGE_CLOSED_WON_ID: "8b7f5dbc-b1a1-4746-9f10-e56bd18d0cf1"
+      DEAL_STAGE_QUOTE_SUBMITTED_ID: "9baaf7dc-5de5-4c6e-82ea-b60a648d4932"
+      DEAL_STAGE_INVOICE_SUBMITTED_ID: "06bc24a7-3bbf-4fac-af4a-2ee88efcc1d0"
+      DEAL_STAGE_PAYMENT_SUBMITTED_ID: "02a602c5-7b1f-4fd6-ac83-25160734d308"
+      DEAL_STAGE_PAYMENT_FAILURE_ID: "4bbf6114-7586-40e0-a175-fa8fa5037d15"
+      DEAL_STAGE_BOOKED_ID: "653f78be-bc2e-44a9-97c3-02aa564a26a4"
+      DEAL_NAME: "Inspection Deal"
+      
+      # Google Places API Configuration
+      GOOGLE_AUTOCOMPLETE_PATH: "/maps/api/place/autocomplete/json"
+      
+      # OpenAI Configuration
+      OPENAI_MODEL: "gpt-4.1"
+      OPENAI_ENABLE_WEBSEARCH: "true"
+      
+      # Twilio Verification Configuration
+      VERIFY_SANDBOX_ENABLED: "true"
+      VERIFY_SANDBOX_CODE: "123456"
+      VERIFY_SERVICE_SID: "AC18a98df495d807de599da357c22a44f9"
+      
+      # Proposal Configuration
+      PROPOSAL_NAME: "New Proposal"
+      PROPOSAL_STATUS: "submitted"
+      PROPOSAL_EXPIRY_DAYS: "7"
+      
+      # Phone Verification Configuration
+      PHONE_VERIFIED_REDIRECT_SECONDS: "3"
+      
+      # Invoice Configuration
+      INVOICE_DUE_DAYS: "7"
+      INVOICE_STATUS: "submitted"
+      
+      # Directus Configuration
+      DIRECTUS_APP_URL: "http://directus:8055"
+      
+      # Application URLs
+      APP_DASHBOARD_URL: "http://localhost:8040"
+      
+      # Payment Failure Reasons
+      FAILED_REASON_REQUIRES_CONFIRMATION: "Payment method attached, needs confirmation"
+      FAILED_REASON_REQUIRES_ACTION: "Customer must authenticate (3DS, OTP)"
+      FAILED_REASON_PROCESSING: "Bank processing, waiting on result"
+      FAILED_REASON_REQUIRES_CAPTURE: "PaymentIntent canceled"
+      
+      # Development Configuration
+      DEBUG_HTTP: "false"
+      NODE_ENV: "development"
+      
+      # Next.js proxy trust configuration
+      NEXTAUTH_URL: "https://form.owner-inspections.com.au"
+      NEXTAUTH_TRUST_HOST: "true"
+    networks:
+      - ownerinspections-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - kong
+    networks:
+      - ownerinspections-network
+
+volumes:
+  kong-data-owner:
+  directus-data-owner:
+  directus-extensions-owner:
+  directus-uploads-owner:
+networks:
+  ownerinspections-network:
+    name: ownerinspections-network
+    driver: bridge
